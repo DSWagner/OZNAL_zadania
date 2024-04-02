@@ -1,0 +1,156 @@
+---
+title: "Semestral Project: Analysis of Obesity Levels (Regression & Classification)"
+author: "David Wagner"
+date: "`r format(Sys.Date(), '%d.%m.%Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+# Introduction
+
+In this project, we delve into a dataset that captures the obesity levels among individuals from Mexico, Peru, and Colombia. The dataset can be found at [Kaggle](https://www.kaggle.com/datasets/aravindpcoder/obesity-or-cvd-risk-classifyregressorcluster?resource=download).
+This rich dataset encompasses 2,111 records and 17 attributes, highlighting diverse eating habits, physical conditions, and demographic details of participants aged between 14 and 61. Our analysis aims to uncover patterns and predictions related to obesity levels through two main hypotheses:
+
+* **Regression Hypothesis:** We hypothesize that an individual's lifestyle and physical condition—reflected through their eating habits, physical activity, and technology usage—are significant predictors of their age.
+
+* **Classification Hypothesis:** We aim to classify individuals into distinct obesity levels (ranging from Underweight to Obesity III) by analyzing their eating habits, physical condition, and demographic information.
+
+These hypotheses guide our exploration and analysis, contributing to a deeper understanding of the factors influencing obesity.
+
+
+# Data Loading and Preprocessing
+
+To initiate our analysis, the first step involves loading the dataset into our R environment. This dataset, stored as "ObesityDataSet.csv", encapsulates vital information on obesity levels among individuals from specific Latin American countries. Our analysis begins by setting the working directory to where the dataset is located and subsequently loading the dataset into R for inspection and preprocessing.
+
+```{r load-data, message=FALSE, warning=FALSE}
+library(readr)
+library(tidyverse)
+library(lobstr)
+library(dplyr)
+library(ggplot2)
+library(magrittr)
+library(data.table) # Implements the %like% operator
+# library(caret)
+library(MASS)
+# library(cutpointr)
+
+
+# Setting the working directory to where the dataset is located
+# Uncomment the appropriate line below to match your directory structure
+
+setwd("C:/Users/dswag/Desktop/Zadania/OZNAL/Data")
+
+# Listing all files in the current working directory to verify the presence of our dataset
+list.files()
+
+# Reading the dataset into R
+raw_data <- read_csv("ObesityDataSet.csv", col_names = TRUE, num_threads = 4)
+
+# Displaying the first few rows of the dataset to ensure it's loaded correctly
+head(raw_data)
+
+# view(raw_data)
+
+# Identifying missing values
+sum(is.na(raw_data))
+colSums(is.na(raw_data))
+
+head(raw_data)
+
+# Function to identify outliers within one column
+remove_outliers <- function(x) {
+  # Ensure the column is numeric
+  if(is.numeric(x)) {
+    Q1 <- quantile(x, 0.25, na.rm = TRUE)
+    Q3 <- quantile(x, 0.75, na.rm = TRUE)
+    IQR <- Q3 - Q1
+    lower_bound <- Q1 - 1.5 * IQR
+    upper_bound <- Q3 + 1.5 * IQR
+    x[x < lower_bound | x > upper_bound] <- NA  # Assign NA to outliers
+  }
+  x
+}
+
+# Apply the function to each column
+cleaned_data <- raw_data %>% mutate(across(where(is.numeric), remove_outliers))
+
+# Optionally, if you want to remove rows with any NAs (which might have been introduced by removing outliers)
+cleaned_data %<>% drop_na()
+raw_data
+cleaned_data
+
+# Check for missing values again
+sum(is.na(cleaned_data))
+# Check data types and convert if necessary
+str(cleaned_data)
+
+# Convert all character columns to factors
+cleaned_data <- cleaned_data %>%
+  mutate(across(where(is.character), as.factor))
+
+str(cleaned_data)
+
+cleaned_data
+
+# Example of standardization
+cleaned_data <- cleaned_data %>%
+  mutate(across(where(is.numeric), scale))
+
+cleaned_data
+
+cleaned_data <- cleaned_data %>% distinct()
+
+cleaned_data
+
+
+```
+
+# Exploratory Data Analysis
+
+Present an exploratory analysis of your dataset. This may include visualizations like histograms, box plots, or scatter plots to understand the distributions and relationships within your data.
+
+```{r load-data, message=FALSE, warning=FALSE}
+
+```
+
+# Regression Analysis: Predicting Age
+
+## Hypothesis
+
+State your regression hypothesis here, describing the expected relationship between lifestyle, physical condition variables, and age.
+
+## Data Preparation
+
+Detail the process of preparing your data for the regression model, including any feature selection or transformation.
+
+## Model Building
+
+Describe how you build your regression model, including the choice of model and any parameters you set.
+
+## Model Evaluation
+
+Explain how you evaluate the performance of your regression model, including metrics like RMSE or MAE.
+
+# Classification Analysis: NObesity Level Classification
+
+## Hypothesis
+
+State your classification hypothesis here, outlining how you expect the variables to predict the obesity level.
+
+## Data Preparation
+
+Detail the process of preparing your data for the classification model, including any feature selection or transformation.
+
+## Model Building
+
+Describe how you build your classification model, including the choice of model and any parameters you set.
+
+## Model Evaluation
+
+Explain how you evaluate the performance of your classification model, using metrics like accuracy, precision, recall, or F1 score.
+
+# Conclusion
+
+Summarize the key findings of your analyses, reflect on any limitations of your study, and suggest possible directions for future research.
