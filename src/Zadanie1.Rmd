@@ -32,15 +32,21 @@ library(dplyr)
 library(ggplot2)
 library(magrittr)
 library(data.table) # Implements the %like% operator
-# library(caret)
+library(caret)
 library(MASS)
 # library(cutpointr)
+library(purrr)
+library(GGally)
+library(ggplot2)
+library(gplots)
+library(pROC)
 
 
 # Setting the working directory to where the dataset is located
 # Uncomment the appropriate line below to match your directory structure
 
-setwd("C:/Users/dswag/Desktop/Zadania/OZNAL/Data")
+# setwd("C:/Users/dswag/Desktop/Zadania/OZNAL/Data")
+setwd("C:/work/oznal/OZNAL_zadania/Data")
 
 # Listing all files in the current working directory to verify the presence of our dataset
 list.files()
@@ -51,13 +57,24 @@ raw_data <- read_csv("ObesityDataSet.csv", col_names = TRUE, num_threads = 4)
 # Displaying the first few rows of the dataset to ensure it's loaded correctly
 head(raw_data)
 
-# view(raw_data)
 
-# Identifying missing values
+# Renaming columns in the dataset to make them more descriptive
+names(raw_data)[names(raw_data) == "FAVC"] <- "FreqConsHighCalFood"
+names(raw_data)[names(raw_data) == "FCVC"] <- "FreqConsVegs"
+names(raw_data)[names(raw_data) == "NCP"] <- "NumMainMeals"
+names(raw_data)[names(raw_data) == "CAEC"] <- "ConsFoodBetwMeals"
+names(raw_data)[names(raw_data) == "CH2O"] <- "ConsWaterDaily"
+names(raw_data)[names(raw_data) == "CALC"] <- "ConsAlc"
+names(raw_data)[names(raw_data) == "SCC"] <- "CalsConsMon"
+names(raw_data)[names(raw_data) == "FAF"] <- "PhysActFreq"
+names(raw_data)[names(raw_data) == "TUE"] <- "TimeTechDev"
+names(raw_data)[names(raw_data) == "MTRANS"] <- "Trans"
+
+# Identifying missing values in dataset
 sum(is.na(raw_data))
-colSums(is.na(raw_data))
 
-head(raw_data)
+# Identifying missing values per column
+colSums(is.na(raw_data))
 
 # Function to identify outliers within one column
 remove_outliers <- function(x) {
@@ -76,34 +93,32 @@ remove_outliers <- function(x) {
 # Apply the function to each column
 cleaned_data <- raw_data %>% mutate(across(where(is.numeric), remove_outliers))
 
-# Optionally, if you want to remove rows with any NAs (which might have been introduced by removing outliers)
+# Optionally, if removing outliers introduced NAs, remove those rows
 cleaned_data %<>% drop_na()
 raw_data
 cleaned_data
 
 # Check for missing values again
 sum(is.na(cleaned_data))
-# Check data types and convert if necessary
+
+# Check data types of each column
 str(cleaned_data)
 
-# Convert all character columns to factors
+# Convert all character columns to factors to represent categorical data
 cleaned_data <- cleaned_data %>%
   mutate(across(where(is.character), as.factor))
 
+# Check factorization of each column
 str(cleaned_data)
-
-cleaned_data
 
 # Example of standardization
 cleaned_data <- cleaned_data %>%
   mutate(across(where(is.numeric), scale))
 
-cleaned_data
-
+# Removing duplicate rows from the datase, keeping only unique rows
 cleaned_data <- cleaned_data %>% distinct()
 
 cleaned_data
-
 
 ```
 
@@ -111,9 +126,49 @@ cleaned_data
 
 Present an exploratory analysis of your dataset. This may include visualizations like histograms, box plots, or scatter plots to understand the distributions and relationships within your data.
 
-```{r load-data, message=FALSE, warning=FALSE}
+```{r eda-data, message=FALSE, warning=FALSE}
+# Select only the numeric columns for the pairs plot
+numerical_data <- cleaned_data[sapply(cleaned_data, is.numeric) ]
+
+# Use ggpairs to create the pairs plot, displaying both scatter plots and correlations
+pairs(numerical_data)
+
+# Calculate correlation matrix for numerical columns
+cor_matrix <- cor(numerical_data, use = "complete.obs")
+
+cor_matrix
+```
+
+**Positive Correlations:**
+
+* Height and Weight (0.44)
+* Age and Weight (0.31)
+* Weight and ConsWaterDaily (0.24)
+
+**Negative Correlations:**
+
+* Age and PhysActFreq (-0.20)
+* Age and TimeTechDev (-0.19)
+
+Most other correlations are weak, indicating little linear relationship.
+
+```{r eda-data1, message=FALSE, warning=FALSE}
+# Plotting the heatmap using base R's heatmap() function
+heatmap.2(x = cor_matrix,
+          scale = "none", 
+          Colv = NA, 
+          Rowv = NA, 
+          dendrogram = "none",
+          trace = "none", 
+          col = colorRampPalette(c("blue", "white", "red"))(n = 299), 
+          margin = c(5, 5), 
+          main = "Correlation Matrix Heatmap",
+          key = TRUE, # This ensures the color key (legend) is displayed
+          keysize = 1.5)
 
 ```
+
+
 
 # Regression Analysis: Predicting Age
 
@@ -124,14 +179,120 @@ State your regression hypothesis here, describing the expected relationship betw
 ## Data Preparation
 
 Detail the process of preparing your data for the regression model, including any feature selection or transformation.
+```{r lm-data, message=FALSE, warning=FALSE}
+# Create a reggresion formula
+regression_formula <- Weight ~ Height + FreqConsHighCalFood + FreqConsVegs + NumMainMeals + PhysActFreq
+```
+
 
 ## Model Building
 
 Describe how you build your regression model, including the choice of model and any parameters you set.
+```{r lm-data1, message=FALSE, warning=FALSE}
+# Fit the linear regression model
+model <- lm(regression_formula, data = cleaned_data)
+
+# Summarize the model to view coefficients and other statistics
+summary(model)
+
+# If you want to check the diagnostic plots for assumptions
+par(mfrow = c(2, 2))
+plot(model)
+```
+### Intercept
+Estimated weight when all other predictors are zero. In this case, it's -184.5926. However, given the nature of weight and the predictors in this context, interpretation of the intercept might not be meaningful
+
+### Height
+For each unit increase in height, weight is estimated to **increase** by approximately **139.2136** units
+
+### FreqConsHighCalFoodyes
+If an individual consumes high-calorie foods frequently (represented as "yes"), their weight is estimated to **increase** by about **14.5107** units compared to those who don't consume high-calorie foods frequently
+
+### FreqConsVegs
+For each unit increase in the frequency of consuming vegetables, weight is estimated to **increase** by about **11.8602** units
+
+### NumMainMeals
+It seems to have a **insignificant** effect of the number of main meals on weight, as the coefficient estimate is close to zero and the **p-value** is **greater** than the typical significance level of **0.05**. This suggests that the number of main meals doesn't significantly contribute to explaining the variation in weight in this model
+
+### PhysActFreq
+For each unit increase in the frequency of physical activity, weight is estimated to **decrease** by about **5.6556** units.
+
+### Residuals
+These are the differences between the observed and predicted values of the dependent variable (weight). The summary statistics for the residuals shows the spread of these differences:
+
+* Min (-2.38) 
+* 1Q (-0.54)
+* Median (0.12)
+* 3Q (0.55)
+* Max (1.94)
+
+### Residual standard error
+This is an estimate of the standard deviation of the errors in the model. It indicates the average amount that the observed values deviate from the predicted values
+
+### Multiple R-squared and Adjusted R-squared
+These are measures of how well the independent variables explain the variation in the dependent variable. In this model, It suggests that about **33.74%** of the variability in weight is explained by the independent variables
+
+### F-statistic and p-value
+This tests the overall significance of the model. In this case, the F-statistic is **170.9** with a very low p-value, suggesting that the model as a whole is significant
+
+```{r lm-data2, message=FALSE, warning=FALSE}
+# Creating a new binary variable 'ObesityBinary' where 1 indicates Obesity (I, II, III) and 0 indicates otherwise
+cleaned_data$ObesityBinary <- ifelse(cleaned_data$Nobesity %in% c("Obesity_Type_I", "Obesity_Type_II", "Obesity_Type_III"), 1, 0)
+
+set.seed(123) # for reproducibility
+
+# Calculate the size of the training set (80% of the dataset)
+training_size <- floor(0.8 * nrow(cleaned_data))
+
+# Sample indices for the training data
+training_indices <- sample(seq_len(nrow(cleaned_data)), size = training_size)
+
+# Split the data
+train_data <- cleaned_data[training_indices, ]
+test_data <- cleaned_data[-training_indices, ]
+
+# Fit the model on the training data
+model_train <- lm(regression_formula, data = train_data)
+
+# Use the model to make predictions on the test data
+predictions <- predict(model_train, newdata = test_data)
+```
 
 ## Model Evaluation
 
 Explain how you evaluate the performance of your regression model, including metrics like RMSE or MAE.
+```{r lm-data3, message=FALSE, warning=FALSE}
+# Calculate the Root Mean Squared Error (RMSE) and Mean Absolute Error (MAE)
+actuals <- test_data$Weight
+mae <- mean(abs(actuals - predictions))
+rmse <- sqrt(mean((predictions - actuals)^2))
+
+# Print the RMSE and MAE
+print(paste("RMSE on test data:", rmse))
+print(paste("MAE on test data:", mae))
+
+# Summarize the model to view coefficients and other statistics
+summary(model_train)
+
+# If you want to check the diagnostic plots for assumptions
+par(mfrow = c(2, 2))
+plot(model_train)
+
+```
+
+
+### RMSE (Root Mean Squared Error)
+* RMSE measures the average magnitude of the errors between predicted and actual values, with higher weights given to larger errors due to squaring
+* A lower RMSE value indicates better model performance, as it means the model's predictions are closer to the actual values on average.
+* In out case, an RMSE of approximately **0.774** suggests that, on average, out model's predictions are off by around **0.774** units of the response variable (in this case, weight).
+
+### MAE (Mean Absolute Error)
+* MAE measures the average magnitude of the absolute errors between predicted and actual values.
+* Like RMSE, a lower MAE value indicates better model performance, as it means the model's predictions are closer to the actual values on average.
+* In our case, an MAE of approximately **0.637** suggests that, on average, our model's predictions are off by around **0.637** units of the response variable (in this case, weight).
+
+Lower RMSE and MAE values indicate better performance, suggesting that our model is making more accurate predictions on the test data.
+
 
 # Classification Analysis: NObesity Level Classification
 

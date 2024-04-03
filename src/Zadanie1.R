@@ -18,7 +18,8 @@ library(pROC)
 # Uncomment the appropriate line below to match your directory structure
 
 # setwd("C:/Users/David Wagner/Desktop/Zadania/4. Semester/OZNAL/Elements of AI/Data")
-setwd("C:/Users/dswag/Desktop/Zadania/OZNAL/Data")
+# setwd("C:/Users/dswag/Desktop/Zadania/OZNAL/Data")
+setwd("C:/work/oznal/OZNAL_zadania/Data")
 
 # Listing all files in the current working directory to verify the presence of our dataset
 list.files()
