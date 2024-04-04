@@ -76,22 +76,7 @@ sum(is.na(raw_data))
 # Identifying missing values per column
 colSums(is.na(raw_data))
 
-# Function to identify outliers within one column
-remove_outliers <- function(x) {
-  # Ensure the column is numeric
-  if(is.numeric(x)) {
-    Q1 <- quantile(x, 0.25, na.rm = TRUE)
-    Q3 <- quantile(x, 0.75, na.rm = TRUE)
-    IQR <- Q3 - Q1
-    lower_bound <- Q1 - 1.5 * IQR
-    upper_bound <- Q3 + 1.5 * IQR
-    x[x < lower_bound | x > upper_bound] <- NA  # Assign NA to outliers
-  }
-  x
-}
-
-# Apply the function to each column
-cleaned_data <- raw_data %>% mutate(across(where(is.numeric), remove_outliers))
+cleaned_data <- raw_data
 
 # Optionally, if removing outliers introduced NAs, remove those rows
 cleaned_data %<>% drop_na()
@@ -112,8 +97,7 @@ cleaned_data <- cleaned_data %>%
 str(cleaned_data)
 
 # Example of standardization
-cleaned_data <- cleaned_data %>%
-  mutate(across(where(is.numeric), scale))
+# cleaned_data <- cleaned_data %>% mutate(across(where(is.numeric), scale))
 
 # Removing duplicate rows from the datase, keeping only unique rows
 cleaned_data <- cleaned_data %>% distinct()
@@ -141,16 +125,22 @@ cor_matrix
 
 **Positive Correlations:**
 
-* Height and Weight (0.44)
-* Age and Weight (0.31)
-* Weight and ConsWaterDaily (0.24)
+* Height and Weight: 0.457
+* Weight and FreqConsVegs: 0.217
+* Height and ConsWaterDaily: 0.220
+* Weight and ConsWaterDaily: 0.204
+* Height and PhysActFreq: 0.294
+* FreqConsVegs and ConsWaterDaily: 0.081
+* NumMainMeals and ConsWaterDaily: 0.075
+* NumMainMeals and PhysActFreq: 0.128
+* ConsWaterDaily and PhysActFreq: 0.165
 
 **Negative Correlations:**
 
-* Age and PhysActFreq (-0.20)
-* Age and TimeTechDev (-0.19)
+* Age and PhysActFreq: -0.148
+* Age and TimeTechDev: -0.303
 
-Most other correlations are weak, indicating little linear relationship.
+Most other correlations are weak (absolute value < 0.1), indicating little linear relationship.
 
 ```{r eda-data1, message=FALSE, warning=FALSE}
 # Plotting the heatmap using base R's heatmap() function
@@ -176,6 +166,8 @@ heatmap.2(x = cor_matrix,
 
 State your regression hypothesis here, describing the expected relationship between lifestyle, physical condition variables, and age.
 
+> We hypothesize that an individual’s lifestyle and physical condition—reflected through their eating habits, physical activity, and technology usage—are significant predictors of their age.
+
 ## Data Preparation
 
 Detail the process of preparing your data for the regression model, including any feature selection or transformation.
@@ -200,40 +192,40 @@ par(mfrow = c(2, 2))
 plot(model)
 ```
 ### Intercept
-Estimated weight when all other predictors are zero. In this case, it's -184.5926. However, given the nature of weight and the predictors in this context, interpretation of the intercept might not be meaningful
+Estimated weight when all other predictors are zero. In this case, it's -183.9069. However, given the nature of weight and the predictors in this context, interpretation of the intercept might not be meaningful
 
 ### Height
-For each unit increase in height, weight is estimated to **increase** by approximately **139.2136** units
+For each unit increase in height, weight is estimated to **increase** by approximately **138.3078** units
 
 ### FreqConsHighCalFoodyes
-If an individual consumes high-calorie foods frequently (represented as "yes"), their weight is estimated to **increase** by about **14.5107** units compared to those who don't consume high-calorie foods frequently
+If an individual consumes high-calorie foods frequently (represented as "yes"), their weight is estimated to **increase** by about **13.9733** units compared to those who don't consume high-calorie foods frequently
 
 ### FreqConsVegs
-For each unit increase in the frequency of consuming vegetables, weight is estimated to **increase** by about **11.8602** units
+For each unit increase in the frequency of consuming vegetables, weight is estimated to **increase** by about **12.0009** units
 
 ### NumMainMeals
 It seems to have a **insignificant** effect of the number of main meals on weight, as the coefficient estimate is close to zero and the **p-value** is **greater** than the typical significance level of **0.05**. This suggests that the number of main meals doesn't significantly contribute to explaining the variation in weight in this model
 
 ### PhysActFreq
-For each unit increase in the frequency of physical activity, weight is estimated to **decrease** by about **5.6556** units.
+For each unit increase in the frequency of physical activity, weight is estimated to **decrease** by about **5.7346** units.
 
 ### Residuals
 These are the differences between the observed and predicted values of the dependent variable (weight). The summary statistics for the residuals shows the spread of these differences:
 
-* Min (-2.38) 
-* 1Q (-0.54)
-* Median (0.12)
-* 3Q (0.55)
-* Max (1.94)
+* Min (-58.403) 
+* 1Q (-14.501)
+* Median (2.009)
+* 3Q (15.874)
+* Max (60.126)
 
 ### Residual standard error
 This is an estimate of the standard deviation of the errors in the model. It indicates the average amount that the observed values deviate from the predicted values
 
 ### Multiple R-squared and Adjusted R-squared
-These are measures of how well the independent variables explain the variation in the dependent variable. In this model, It suggests that about **33.74%** of the variability in weight is explained by the independent variables
+These are measures of how well the independent variables explain the variation in the dependent variable. In this model, It suggests that about **33.38%** of the variability in weight is explained by the independent variables
 
 ### F-statistic and p-value
-This tests the overall significance of the model. In this case, the F-statistic is **170.9** with a very low p-value, suggesting that the model as a whole is significant
+This tests the overall significance of the model. In this case, the F-statistic is **210.1** with a very low p-value, suggesting that the model as a whole is significant
 
 ```{r lm-data2, message=FALSE, warning=FALSE}
 # Creating a new binary variable 'ObesityBinary' where 1 indicates Obesity (I, II, III) and 0 indicates otherwise
@@ -300,17 +292,143 @@ Lower RMSE and MAE values indicate better performance, suggesting that our model
 
 State your classification hypothesis here, outlining how you expect the variables to predict the obesity level.
 
+> We aim to classify individuals into distinct obesity levels (ranging from Underweight to Obesity III) by analyzing their eating habits, physical condition, and demographic information.
+
 ## Data Preparation
 
-Detail the process of preparing your data for the classification model, including any feature selection or transformation.
+All necessary attributes have already been modified.
 
 ## Model Building
 
-Describe how you build your classification model, including the choice of model and any parameters you set.
+```{r glm-data, message=FALSE, warning=FALSE}
+# Fit the logistic regression model on the training data
+classification_model_train <- glm(ObesityBinary ~ FreqConsHighCalFood + NumMainMeals + ConsFoodBetwMeals + ConsAlc + Age + Gender, data = train_data, family = binomial())
+
+# Summarize the model to view coefficients and other statistics
+summary(classification_model_train)
+```
+
+### FreqConsHighCalFoodyes
+Those who frequently consume high-calorie foods are **2.34** times more likely to be classified as obese.
+
+### NumMainMeals
+Each additional main meal increases the odds of obesity by approximately **1.11.**
+
+### ConsFoodBetwMealsFrequently
+Compared to those who **never** eat between meals, **frequent** eaters between meals have significantly **lower** odds of obesity.
+
+### Age
+Each year of age increases the odds of obesity by approximately **1.07**.
+
+### GenderMale
+Being **male** is associated with **lower** odds of obesity compared to being female.
+
+```{r glm-data1, message=FALSE, warning=FALSE}
+# Predict probabilities on the test data
+test_probabilities <- predict(classification_model_train, newdata = test_data, type = "response")
+
+# Calculate ROC curve and AUC on test data
+roc_test_result <- roc(test_data$ObesityBinary, test_probabilities)
+plot(roc_test_result)
+auc_test <- auc(roc_test_result)
+
+# Print AUC
+print(paste("AUC on test data:", auc_test))
+```
+
+### AUC (Area Under the ROC Curve)
+An AUC of **0.7777** indicates that the model performs reasonably well in distinguishing between the classes, with a higher value suggesting better discrimination than random chance.
+
+```{r glm-data2, message=FALSE, warning=FALSE}
+# Convert probabilities to binary outcomes based on a threshold
+predicted_outcomes <- ifelse(test_probabilities > 0.5, 1, 0)
+
+# Confusion Matrix
+table(Predicted = predicted_outcomes, Actual = test_data$ObesityBinary)
+
+# Creating the confusion matrix with caret
+conf_matrix <- confusionMatrix(as.factor(predicted_outcomes), as.factor(test_data$ObesityBinary))
+```
+
+* True Negatives (TN): 117
+* False Positives (FP): 30
+* False Negatives (FN): 98
+* True Positives (TP): 173
 
 ## Model Evaluation
 
 Explain how you evaluate the performance of your classification model, using metrics like accuracy, precision, recall, or F1 score.
+
+```{r glm-data3, message=FALSE, warning=FALSE}
+# Plotting the confusion matrix with gplots
+graphics.off()
+heatmap.2(as.matrix(conf_matrix$table),
+          Rowv = NA, Colv = NA,
+          col = colorRampPalette(c("blue", "white", "red"))(n = 100),
+          dendrogram = "none", trace = "none",
+          key = TRUE, keysize = 1,
+          main = "Confusion Matrix Heatmap",
+          xlab = "Actual", ylab = "Predicted")
+
+# Printing the overall statistics from the confusion matrix
+print(conf_matrix$overall)
+
+# Calculate log loss
+log_loss <- function(predicted_probs, actual_outcomes) {
+  N <- length(actual_outcomes)
+  loss <- 0
+  for (i in 1:N) {
+    predicted_prob <- predicted_probs[i]
+    actual_outcome <- actual_outcomes[i]
+    instance_loss <- ifelse(actual_outcome == 1, -log(predicted_prob), -log(1 - predicted_prob))
+    loss <- loss + instance_loss
+  }
+  loss <- loss / N
+  return(loss)
+}
+
+# Specific metrics can be accessed directly
+accuracy <- conf_matrix$overall['Accuracy']
+precision <- conf_matrix$byClass['Pos Pred Value']
+recall <- conf_matrix$byClass['Sensitivity'] # Recall is the same as Sensitivity
+specificity <- conf_matrix$byClass['Specificity']
+f1Score <- 2 * (precision * recall) / (precision + recall)
+loss <- log_loss(test_probabilities, test_data$ObesityBinary)
+
+# Printing the metrics
+cat("Accuracy:", accuracy, "\n",
+"Precision:", precision, "\n",
+"Recall (Sensitivity):", recall, "\n",
+"Specificity:", specificity, "\n",
+"F1 Score:", f1Score, "\n",
+"Log loss:", loss, "\n"
+)
+```
+
+### Accuracy
+* Accuracy represents the proportion of correctly classified instances out of the total instances.
+* In this case, an accuracy of **0.6937799** means that approximately **69.38%** of the instances were classified correctly by the model.
+
+### Precision
+* Precision represents the proportion of correctly predicted positive instances (true positives) out of all instances predicted as positive (true positives + false positives).
+* A precision of **0.7959184** indicates that around **79.59%** of the instances predicted as positive are actually positive.
+
+### Recall (Sensitivity)
+* Recall, also known as sensitivity, represents the proportion of correctly predicted positive instances (true positives) out of all actual positive instances (true positives + false negatives).
+* A recall of **0.544186** suggests that the model correctly identifies approximately **54.42%** of the actual positive instances.
+
+### Specificity
+* Specificity represents the proportion of correctly predicted negative instances (true negatives) out of all actual negative instances (true negatives + false positives).
+* A specificity of **0.8522167** means that approximately **85.22%** of the actual negative instances are correctly identified as negative by the model.
+
+### F1 Score
+* The F1 score is the harmonic mean of precision and recall. It provides a balance between precision and recall, considering both false positives and false negatives.
+* An F1 score of **0.6464088** suggests that the model achieves a balance between precision and recall, with a higher value indicating better performance.
+
+
+### Log Loss
+* Log loss measures the performance of a classification model where the prediction output is a probability value between 0 and 1.
+* A log loss of **0.5623211** indicates the average negative log-likelihood of the predicted probabilities compared to the actual outcomes. Lower values suggest better performance.
 
 # Conclusion
 
