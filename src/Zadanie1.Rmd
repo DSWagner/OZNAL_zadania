@@ -13,9 +13,9 @@ output:
 In this project, we delve into a dataset that captures the obesity levels among individuals from Mexico, Peru, and Colombia. The dataset can be found at [Kaggle](https://www.kaggle.com/datasets/aravindpcoder/obesity-or-cvd-risk-classifyregressorcluster?resource=download).
 This rich dataset encompasses 2,111 records and 17 attributes, highlighting diverse eating habits, physical conditions, and demographic details of participants aged between 14 and 61. Our analysis aims to uncover patterns and predictions related to obesity levels through two main hypotheses:
 
-* **Regression Hypothesis:** We hypothesize that an individual's lifestyle and physical condition—reflected through their eating habits, physical activity, and technology usage—are significant predictors of their age.
+* **Regression Hypothesis:** We hypothesize that an individual's body weight can be significantly predicted by a combination of their height, frequency of consuming high-calorie food, frequency of vegetable consumption, number of main meals per day, and physical activity frequency. These factors collectively represent an individual's lifestyle and physical condition, offering insights into how these variables contribute to body weight variations.
 
-* **Classification Hypothesis:** We aim to classify individuals into distinct obesity levels (ranging from Underweight to Obesity III) by analyzing their eating habits, physical condition, and demographic information.
+* **Classification Hypothesis:** We aim to classify individuals into two categories: those at risk of obesity and those not, by examining the influence of high-calorie food consumption frequency, the number of main meals, consumption of food between meals, alcohol consumption, age, and gender. This model seeks to understand how these dietary habits, demographic information, and personal behaviors correlate with the risk of obesity.
 
 These hypotheses guide our exploration and analysis, contributing to a deeper understanding of the factors influencing obesity.
 
@@ -31,7 +31,7 @@ library(lobstr)
 library(dplyr)
 library(ggplot2)
 library(magrittr)
-library(data.table) # Implements the %like% operator
+library(data.table)
 library(caret)
 library(MASS)
 # library(cutpointr)
@@ -45,8 +45,8 @@ library(pROC)
 # Setting the working directory to where the dataset is located
 # Uncomment the appropriate line below to match your directory structure
 
-# setwd("C:/Users/dswag/Desktop/Zadania/OZNAL/Data")
-setwd("C:/work/oznal/OZNAL_zadania/Data")
+setwd("C:/Users/dswag/Desktop/Zadania/OZNAL/Data")
+# setwd("C:/work/oznal/OZNAL_zadania/Data")
 
 # Listing all files in the current working directory to verify the presence of our dataset
 list.files()
@@ -76,9 +76,24 @@ sum(is.na(raw_data))
 # Identifying missing values per column
 colSums(is.na(raw_data))
 
-cleaned_data <- raw_data
+# Function to identify outliers within one column (instead of 0.25 and 0.75 quantiles we used 0.15 and 0.85 to maintain a reasonable dataset size)
+remove_outliers <- function(x) {
+  # Ensure the column is numeric
+  if(is.numeric(x)) {
+    Q1 <- quantile(x, 0.15, na.rm = TRUE)
+    Q3 <- quantile(x, 0.85, na.rm = TRUE)
+    IQR <- Q3 - Q1
+    lower_bound <- Q1 - 1.5 * IQR
+    upper_bound <- Q3 + 1.5 * IQR
+    x[x < lower_bound | x > upper_bound] <- NA  # Assign NA to outliers
+  }
+  x
+}
 
-# Optionally, if removing outliers introduced NAs, remove those rows
+# Apply the function to each column
+cleaned_data <- raw_data %>% mutate(across(where(is.numeric), remove_outliers))
+
+# If removing outliers introduced NAs, remove those rows
 cleaned_data %<>% drop_na()
 raw_data
 cleaned_data
@@ -96,10 +111,7 @@ cleaned_data <- cleaned_data %>%
 # Check factorization of each column
 str(cleaned_data)
 
-# Example of standardization
-# cleaned_data <- cleaned_data %>% mutate(across(where(is.numeric), scale))
-
-# Removing duplicate rows from the datase, keeping only unique rows
+# Removing duplicate rows from the dataset, keeping only unique rows
 cleaned_data <- cleaned_data %>% distinct()
 
 cleaned_data
@@ -108,7 +120,7 @@ cleaned_data
 
 # Exploratory Data Analysis
 
-Present an exploratory analysis of your dataset. This may include visualizations like histograms, box plots, or scatter plots to understand the distributions and relationships within your data.
+Our exploratory data analysis revealed significant relationships within the dataset, particularly between height and weight, and age and weight, indicating that taller and older individuals tend to have a higher body weight. However, correlations between lifestyle factors such as physical activity frequency and technology use with age suggest potential areas for targeted interventions. The use of visualizations, including scatter plots and heatmaps, allowed for a comprehensive understanding of the relationships and distribution of variables within our dataset.
 
 ```{r eda-data, message=FALSE, warning=FALSE}
 # Select only the numeric columns for the pairs plot
@@ -125,22 +137,16 @@ cor_matrix
 
 **Positive Correlations:**
 
-* Height and Weight: 0.457
-* Weight and FreqConsVegs: 0.217
-* Height and ConsWaterDaily: 0.220
-* Weight and ConsWaterDaily: 0.204
-* Height and PhysActFreq: 0.294
-* FreqConsVegs and ConsWaterDaily: 0.081
-* NumMainMeals and ConsWaterDaily: 0.075
-* NumMainMeals and PhysActFreq: 0.128
-* ConsWaterDaily and PhysActFreq: 0.165
+* Height and Weight (0.46)
+* Age and Weight (0.22)
+* Weight and ConsWaterDaily (0.22)
 
 **Negative Correlations:**
 
-* Age and PhysActFreq: -0.148
-* Age and TimeTechDev: -0.303
+* Age and PhysActFreq (-0.16)
+* Age and TimeTechDev (-0.30)
 
-Most other correlations are weak (absolute value < 0.1), indicating little linear relationship.
+Most other correlations are weak, indicating little linear relationship.
 
 ```{r eda-data1, message=FALSE, warning=FALSE}
 # Plotting the heatmap using base R's heatmap() function
@@ -160,17 +166,16 @@ heatmap.2(x = cor_matrix,
 
 
 
-# Regression Analysis: Predicting Age
+# Regression Analysis: Predicting Weight
 
 ## Hypothesis
 
-State your regression hypothesis here, describing the expected relationship between lifestyle, physical condition variables, and age.
+**Null Hypothesis (H0):** There is no significant relationship between an individual's body weight and the independent variables of height, frequency of consuming high-calorie food, frequency of vegetable consumption, number of main meals per day, and physical activity frequency. In other words, these lifestyle and physical condition factors do not predict an individual's body weight.
 
-> We hypothesize that an individual’s lifestyle and physical condition—reflected through their eating habits, physical activity, and technology usage—are significant predictors of their age.
+**Alternative Hypothesis (H1):** There is a significant relationship between an individual's body weight and the independent variables of height, frequency of consuming high-calorie food, frequency of vegetable consumption, number of main meals per day, and physical activity frequency. These factors collectively serve as significant predictors of an individual's body weight.
 
 ## Data Preparation
-
-Detail the process of preparing your data for the regression model, including any feature selection or transformation.
+The data was already cleaned and prepared for model building, since the dataset didn't contain any missing values. The categorical columns were factorized and the outliers removed. Let's create a regression formula based on our hypothesis.
 ```{r lm-data, message=FALSE, warning=FALSE}
 # Create a reggresion formula
 regression_formula <- Weight ~ Height + FreqConsHighCalFood + FreqConsVegs + NumMainMeals + PhysActFreq
@@ -179,7 +184,7 @@ regression_formula <- Weight ~ Height + FreqConsHighCalFood + FreqConsVegs + Num
 
 ## Model Building
 
-Describe how you build your regression model, including the choice of model and any parameters you set.
+The regression model was constructed to predict body weight based on height, frequency of consuming high-calorie food, frequency of vegetable consumption, and physical activity frequency. The model building process involved cleaning and preprocessing the data, including outlier removal and factorizing categorical variables, followed by the application of a linear regression formula. Despite the exclusion of the *NumMainMeals* variable due to its insignificance, the model leverages the remaining variables to predict weight.
 ```{r lm-data1, message=FALSE, warning=FALSE}
 # Fit the linear regression model
 model <- lm(regression_formula, data = cleaned_data)
@@ -191,44 +196,48 @@ summary(model)
 par(mfrow = c(2, 2))
 plot(model)
 ```
+
 ### Intercept
-Estimated weight when all other predictors are zero. In this case, it's -183.9069. However, given the nature of weight and the predictors in this context, interpretation of the intercept might not be meaningful
+Estimated weight when all other predictors are zero. In this case, it's **-183.8161**. However, given the nature of weight and the predictors in this context, interpretation of the intercept might not be meaningful.
 
 ### Height
-For each unit increase in height, weight is estimated to **increase** by approximately **138.3078** units
+For each unit increase in height, weight is estimated to **increase** by approximately **138.2095** units
 
 ### FreqConsHighCalFoodyes
-If an individual consumes high-calorie foods frequently (represented as "yes"), their weight is estimated to **increase** by about **13.9733** units compared to those who don't consume high-calorie foods frequently
+If an individual consumes high-calorie foods frequently (represented as "yes"), their weight is estimated to **increase** by about **14.0116** units compared to those who don't consume high-calorie foods frequently
 
 ### FreqConsVegs
-For each unit increase in the frequency of consuming vegetables, weight is estimated to **increase** by about **12.0009** units
+For each unit increase in the frequency of consuming vegetables, weight is estimated to **increase** by about **12.0400** units
 
 ### NumMainMeals
-It seems to have a **insignificant** effect of the number of main meals on weight, as the coefficient estimate is close to zero and the **p-value** is **greater** than the typical significance level of **0.05**. This suggests that the number of main meals doesn't significantly contribute to explaining the variation in weight in this model
+It seems to have a **insignificant** effect of the number of main meals on weight, as the coefficient estimate is close to zero and the **p-value** is **greater** than the typical significance level of **0.05**. This suggests that the number of main meals doesn't significantly contribute to explaining the variation in weight in this model.
 
 ### PhysActFreq
-For each unit increase in the frequency of physical activity, weight is estimated to **decrease** by about **5.7346** units.
+For each unit increase in the frequency of physical activity, weight is estimated to **decrease** by about **-5.7360** units.
 
 ### Residuals
 These are the differences between the observed and predicted values of the dependent variable (weight). The summary statistics for the residuals shows the spread of these differences:
 
-* Min (-58.403) 
-* 1Q (-14.501)
-* Median (2.009)
-* 3Q (15.874)
-* Max (60.126)
+* Min (-58.431) 
+* 1Q (-14.580)
+* Median (2.077)
+* 3Q (15.853)
+* Max (60.099)
 
 ### Residual standard error
 This is an estimate of the standard deviation of the errors in the model. It indicates the average amount that the observed values deviate from the predicted values
 
 ### Multiple R-squared and Adjusted R-squared
-These are measures of how well the independent variables explain the variation in the dependent variable. In this model, It suggests that about **33.38%** of the variability in weight is explained by the independent variables
+These are measures of how well the independent variables explain the variation in the dependent variable. In this model, It suggests that about **33.52%** of the variability in weight is explained by the independent variables
 
 ### F-statistic and p-value
-This tests the overall significance of the model. In this case, the F-statistic is **210.1** with a very low p-value, suggesting that the model as a whole is significant
+This tests the overall significance of the model. In this case, the F-statistic is **208.9** with a very low p-value, suggesting that the model as a whole is significant
+
+### Apply insights to the model
+First we split the dataset into train/test sets with ratio 8:2 respectively. Eventually we remove the *NumMainMeals* attribute from the regression formula, since it doesn't significantly contribute to explaining the variation in weight.
 
 ```{r lm-data2, message=FALSE, warning=FALSE}
-# Creating a new binary variable 'ObesityBinary' where 1 indicates Obesity (I, II, III) and 0 indicates otherwise
+# # Creating a new binary variable 'ObesityBinary' where 1 indicates Obesity (I, II, III) and 0 indicates otherwise
 cleaned_data$ObesityBinary <- ifelse(cleaned_data$Nobesity %in% c("Obesity_Type_I", "Obesity_Type_II", "Obesity_Type_III"), 1, 0)
 
 set.seed(123) # for reproducibility
@@ -244,6 +253,7 @@ train_data <- cleaned_data[training_indices, ]
 test_data <- cleaned_data[-training_indices, ]
 
 # Fit the model on the training data
+regression_formula <- Weight ~ Height + FreqConsHighCalFood + FreqConsVegs + PhysActFreq
 model_train <- lm(regression_formula, data = train_data)
 
 # Use the model to make predictions on the test data
@@ -252,7 +262,7 @@ predictions <- predict(model_train, newdata = test_data)
 
 ## Model Evaluation
 
-Explain how you evaluate the performance of your regression model, including metrics like RMSE or MAE.
+Model performance was evaluated using RMSE and MAE, yielding values of approximately 20.46 and 16.95, respectively. These metrics indicate the model's average prediction error in terms of body weight, suggesting that while the model captures the general trend, there's noticeable deviation from actual values. The evaluation highlights the model's predictive accuracy and areas for improvement.
 ```{r lm-data3, message=FALSE, warning=FALSE}
 # Calculate the Root Mean Squared Error (RMSE) and Mean Absolute Error (MAE)
 actuals <- test_data$Weight
@@ -276,23 +286,28 @@ plot(model_train)
 ### RMSE (Root Mean Squared Error)
 * RMSE measures the average magnitude of the errors between predicted and actual values, with higher weights given to larger errors due to squaring
 * A lower RMSE value indicates better model performance, as it means the model's predictions are closer to the actual values on average.
-* In out case, an RMSE of approximately **0.774** suggests that, on average, out model's predictions are off by around **0.774** units of the response variable (in this case, weight).
+* In our case, an RMSE of approximately **20.4636** suggests that, on average, out model's predictions are off by around **20.4636** units of the response variable (in this case, weight).
 
 ### MAE (Mean Absolute Error)
 * MAE measures the average magnitude of the absolute errors between predicted and actual values.
 * Like RMSE, a lower MAE value indicates better model performance, as it means the model's predictions are closer to the actual values on average.
-* In our case, an MAE of approximately **0.637** suggests that, on average, our model's predictions are off by around **0.637** units of the response variable (in this case, weight).
+* In our case, an MAE of approximately **16.9483** suggests that, on average, our model's predictions are off by around **16.9483** units of the response variable (in this case, weight).
 
 Lower RMSE and MAE values indicate better performance, suggesting that our model is making more accurate predictions on the test data.
 
+## Conclusion
+Based on the model's results, we accept the alternative hypothesis (H1) that there is a significant relationship between an individual's body weight and the independent variables of height, frequency of consuming high-calorie food, frequency of vegetable consumption, and physical activity frequency. These factors collectively serve as significant predictors of an individual's body weight, confirming our regression hypothesis. However, the model evaluation suggests a need for further refinement to improve accuracy, potentially by exploring additional predictors or employing more complex modeling techniques.
 
-# Classification Analysis: NObesity Level Classification
+
+# Classification Analysis: NObesity Level Classification (Binary)
 
 ## Hypothesis
 
-State your classification hypothesis here, outlining how you expect the variables to predict the obesity level.
+**Null Hypothesis (H0):** There is no significant relationship between the risk of obesity and the independent variables of frequency of consuming high-calorie food, number of main meals, consumption of food between meals, alcohol consumption, age, and gender. These variables do not significantly contribute to predicting whether an individual is at risk of obesity or not.
 
-> We aim to classify individuals into distinct obesity levels (ranging from Underweight to Obesity III) by analyzing their eating habits, physical condition, and demographic information.
+**Alternative Hypothesis (H1):** There is a significant relationship between the risk of obesity and the independent variables of frequency of consuming high-calorie food, number of main meals, consumption of food between meals, alcohol consumption, age, and gender. These factors collectively serve as significant predictors in classifying individuals into categories indicating their risk of obesity.
+
+We aim to classify individuals into binary obesity levels (1 if Obesity I/II/III, otherwise 0) by analyzing their eating habits, physical condition, and demographic information.
 
 ## Data Preparation
 
@@ -308,20 +323,26 @@ classification_model_train <- glm(ObesityBinary ~ FreqConsHighCalFood + NumMainM
 summary(classification_model_train)
 ```
 
-### FreqConsHighCalFoodyes
-Those who frequently consume high-calorie foods are **2.34** times more likely to be classified as obese.
+### FreqConsHighCalFood (yes)
+Individuals who frequently consume high-calorie foods are significantly more likely to be classified as obese. Specifically, the model suggests that consuming high-calorie foods frequently increases the odds of being classified as obese by a factor of **exp(2.39902)**, which is approximately **11.01** times higher compared to those who do not frequently consume high-calorie foods.
 
 ### NumMainMeals
-Each additional main meal increases the odds of obesity by approximately **1.11.**
+The number of main meals has a positive but not statistically significant effect on the odds of obesity, with each additional main meal increasing the odds by a factor of **exp(0.08867)**, approximately **1.09** times. However, due to the p-value of **0.242675**, this effect is not considered statistically significant within the context of this model.
 
-### ConsFoodBetwMealsFrequently
-Compared to those who **never** eat between meals, **frequent** eaters between meals have significantly **lower** odds of obesity.
+### ConsFoodBetwMeals (Frequently)
+Frequent consumption of food between meals is associated with a significant decrease in the odds of obesity. Compared to the baseline category, frequent eaters have **exp(-1.57740)**, or about **0.21** times the odds of being classified as obese, indicating a protective effect against obesity.
+
+### ConsFoodBetwMeals (Sometimes)
+Eating between meals sometimes, as opposed to never, increases the odds of being classified as obese by a factor of **exp(1.51263)**, or approximately **4.54** times.
+
+### ConsAlc (Frequently, Sometimes, No)
+The consumption of alcohol, whether frequently, sometimes, or not at all, shows large coefficients due to the presence of wide standard errors, indicating instability in these estimates likely due to multicollinearity or sparse data within these categories. As such, the interpretation of alcohol consumption's effect on obesity odds from this model should be approached with caution.
 
 ### Age
-Each year of age increases the odds of obesity by approximately **1.07**.
+Each additional year of age increases the odds of being classified as obese by a factor of **exp(0.08497)**, or approximately **1.09** times. This suggests a slight but significant increase in obesity risk with age.
 
-### GenderMale
-Being **male** is associated with **lower** odds of obesity compared to being female.
+### Gender (Male)
+Being male is associated with slightly lower odds of being classified as obese compared to females. The model suggests that males have **exp(-0.16339)**, or about **0.85** times the odds of being classified as obese compared to females, though this result is not statistically significant **(p-value = 0.152692)**.
 
 ```{r glm-data1, message=FALSE, warning=FALSE}
 # Predict probabilities on the test data
@@ -337,7 +358,7 @@ print(paste("AUC on test data:", auc_test))
 ```
 
 ### AUC (Area Under the ROC Curve)
-An AUC of **0.7777** indicates that the model performs reasonably well in distinguishing between the classes, with a higher value suggesting better discrimination than random chance.
+An AUC of **0.7621** indicates that the model performs reasonably well in distinguishing between the classes, with a higher value suggesting better discrimination than random chance.
 
 ```{r glm-data2, message=FALSE, warning=FALSE}
 # Convert probabilities to binary outcomes based on a threshold
@@ -350,14 +371,14 @@ table(Predicted = predicted_outcomes, Actual = test_data$ObesityBinary)
 conf_matrix <- confusionMatrix(as.factor(predicted_outcomes), as.factor(test_data$ObesityBinary))
 ```
 
-* True Negatives (TN): 117
+* True Negatives (TN): 123
 * False Positives (FP): 30
 * False Negatives (FN): 98
-* True Positives (TP): 173
+* True Positives (TP): 163
 
 ## Model Evaluation
 
-Explain how you evaluate the performance of your classification model, using metrics like accuracy, precision, recall, or F1 score.
+The classification model demonstrated an accuracy of approximately 68.75%, with a precision of 80.39% and a recall of 55.16%. The F1 score of 0.6542553 indicates a reasonable balance between precision and recall, suggesting the model is effective in identifying individuals at risk of obesity, though there is room for improvement in recall. The log loss of 0.5553242 reflects the model's efficiency in predicting the probability of obesity risk with a moderate degree of certainty.
 
 ```{r glm-data3, message=FALSE, warning=FALSE}
 # Plotting the confusion matrix with gplots
@@ -407,29 +428,29 @@ cat("Accuracy:", accuracy, "\n",
 
 ### Accuracy
 * Accuracy represents the proportion of correctly classified instances out of the total instances.
-* In this case, an accuracy of **0.6937799** means that approximately **69.38%** of the instances were classified correctly by the model.
+* In this case, an accuracy of **0.6875** means that approximately **68.75%** of the instances were classified correctly by the model.
 
 ### Precision
 * Precision represents the proportion of correctly predicted positive instances (true positives) out of all instances predicted as positive (true positives + false positives).
-* A precision of **0.7959184** indicates that around **79.59%** of the instances predicted as positive are actually positive.
+* A precision of **0.8039216** indicates that around **80.39%** of the instances predicted as positive are actually positive.
 
 ### Recall (Sensitivity)
 * Recall, also known as sensitivity, represents the proportion of correctly predicted positive instances (true positives) out of all actual positive instances (true positives + false negatives).
-* A recall of **0.544186** suggests that the model correctly identifies approximately **54.42%** of the actual positive instances.
+* A recall of **0.5515695** suggests that the model correctly identifies approximately **55.16%** of the actual positive instances.
 
 ### Specificity
 * Specificity represents the proportion of correctly predicted negative instances (true negatives) out of all actual negative instances (true negatives + false positives).
-* A specificity of **0.8522167** means that approximately **85.22%** of the actual negative instances are correctly identified as negative by the model.
+* A specificity of **0.8445596** means that approximately **84.46%** of the actual negative instances are correctly identified as negative by the model.
 
 ### F1 Score
 * The F1 score is the harmonic mean of precision and recall. It provides a balance between precision and recall, considering both false positives and false negatives.
-* An F1 score of **0.6464088** suggests that the model achieves a balance between precision and recall, with a higher value indicating better performance.
+* An F1 score of **0.6542553** suggests that the model achieves a balance between precision and recall, with a higher value indicating better performance.
 
 
 ### Log Loss
 * Log loss measures the performance of a classification model where the prediction output is a probability value between 0 and 1.
-* A log loss of **0.5623211** indicates the average negative log-likelihood of the predicted probabilities compared to the actual outcomes. Lower values suggest better performance.
+* A log loss of **0.5553242** indicates the average negative log-likelihood of the predicted probabilities compared to the actual outcomes. Lower values suggest better performance.
 
-# Conclusion
+## Conclusion
 
-Summarize the key findings of your analyses, reflect on any limitations of your study, and suggest possible directions for future research.
+The analysis supports the alternative hypothesis (H1) that there is a significant relationship between the risk of obesity and the variables analyzed, including the frequency of consuming high-calorie foods, the number of main meals, consumption of food between meals, alcohol consumption, age, and gender. These factors are significant predictors of an individual's risk of obesity. Future research could explore additional variables or apply more complex models to enhance predictive accuracy and reduce log loss, further refining our understanding of obesity risk factors.
