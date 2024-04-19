@@ -45,8 +45,8 @@ library(pROC)
 # Setting the working directory to where the dataset is located
 # Uncomment the appropriate line below to match your directory structure
 
-setwd("C:/Users/dswag/Desktop/Zadania/OZNAL/Data")
-# setwd("C:/work/oznal/OZNAL_zadania/Data")
+# setwd("C:/Users/dswag/Desktop/Zadania/OZNAL/Data")
+setwd("C:/work/oznal/OZNAL_zadania/Data")
 
 # Listing all files in the current working directory to verify the presence of our dataset
 list.files()

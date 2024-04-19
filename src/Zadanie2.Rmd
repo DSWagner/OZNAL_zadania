@@ -1,0 +1,457 @@
+---
+title: "Semestral Project: Analysis of Obesity Levels (Implementation and Evaluation of Advanced Methods in Machine Learning)"
+author: "David Wagner, Viktor Klíma"
+date: "`r format(Sys.Date(), '%d.%m.%Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+# Introduction
+
+In this project, we delve into a dataset that captures the obesity levels among individuals from Mexico, Peru, and Colombia. The dataset can be found at [Kaggle](https://www.kaggle.com/datasets/aravindpcoder/obesity-or-cvd-risk-classifyregressorcluster?resource=download).
+This rich dataset encompasses 2,111 records and 17 attributes, highlighting diverse eating habits, physical conditions, and demographic details of participants aged between 14 and 61. Our analysis aims to uncover patterns and predictions related to obesity levels through two main hypotheses:
+
+* **Classification Hypothesis:** We aim to classify individuals into two categories: those at risk of obesity and those not, by examining the influence of high-calorie food consumption frequency, the number of main meals, consumption of food between meals, alcohol consumption, age, and gender. This model seeks to understand how these dietary habits, demographic information, and personal behaviors correlate with the risk of obesity.
+
+These hypotheses guide our exploration and analysis, contributing to a deeper understanding of the factors influencing obesity.
+
+
+# Data Loading and Preprocessing
+
+To initiate our analysis, the first step involves loading the dataset into our R environment. This dataset, stored as "ObesityDataSet.csv", encapsulates vital information on obesity levels among individuals from specific Latin American countries. Our analysis begins by setting the working directory to where the dataset is located and subsequently loading the dataset into R for inspection and preprocessing.
+
+```{r load-data, message=FALSE, warning=FALSE}
+library(readr)
+library(tidyverse)
+library(lobstr)
+library(dplyr)
+library(ggplot2)
+library(magrittr)
+library(data.table)
+library(caret)
+library(MASS)
+library(purrr)
+library(GGally)
+library(ggplot2)
+library(gplots)
+library(pROC)
+library(kernlab)
+library(stats)
+library(e1071)
+
+
+# Setting the working directory to where the dataset is located
+# Uncomment the appropriate line below to match your directory structure
+# setwd("C:/Users/dswag/Desktop/Zadania/OZNAL/Data")
+setwd("C:/work/oznal/OZNAL_zadania/Data")
+
+# Listing all files in the current working directory to verify the presence of our dataset
+list.files()
+
+# Reading the dataset into R
+raw_data <- read_csv("ObesityDataSet.csv", col_names = TRUE, num_threads = 4)
+
+# Displaying the first few rows of the dataset to ensure it's loaded correctly
+head(raw_data)
+
+
+# Renaming columns in the dataset to make them more descriptive
+names(raw_data)[names(raw_data) == "FAVC"] <- "FreqConsHighCalFood"
+names(raw_data)[names(raw_data) == "FCVC"] <- "FreqConsVegs"
+names(raw_data)[names(raw_data) == "NCP"] <- "NumMainMeals"
+names(raw_data)[names(raw_data) == "CAEC"] <- "ConsFoodBetwMeals"
+names(raw_data)[names(raw_data) == "CH2O"] <- "ConsWaterDaily"
+names(raw_data)[names(raw_data) == "CALC"] <- "ConsAlc"
+names(raw_data)[names(raw_data) == "SCC"] <- "CalsConsMon"
+names(raw_data)[names(raw_data) == "FAF"] <- "PhysActFreq"
+names(raw_data)[names(raw_data) == "TUE"] <- "TimeTechDev"
+names(raw_data)[names(raw_data) == "MTRANS"] <- "Trans"
+
+# Identifying missing values in dataset
+sum(is.na(raw_data))
+
+# Identifying missing values per column
+colSums(is.na(raw_data))
+
+# Function to identify outliers within one column (instead of 0.25 and 0.75 quantiles we used 0.15 and 0.85 to maintain a reasonable dataset size)
+remove_outliers <- function(x) {
+  # Ensure the column is numeric
+  if(is.numeric(x)) {
+    Q1 <- quantile(x, 0.15, na.rm = TRUE)
+    Q3 <- quantile(x, 0.85, na.rm = TRUE)
+    IQR <- Q3 - Q1
+    lower_bound <- Q1 - 1.5 * IQR
+    upper_bound <- Q3 + 1.5 * IQR
+    x[x < lower_bound | x > upper_bound] <- NA  # Assign NA to outliers
+  }
+  x
+}
+
+# Apply the function to each column
+cleaned_data <- raw_data %>% mutate(across(where(is.numeric), remove_outliers))
+
+# If removing outliers introduced NAs, remove those rows
+cleaned_data %<>% drop_na()
+raw_data
+cleaned_data
+
+# Check for missing values again
+sum(is.na(cleaned_data))
+
+# Check data types of each column
+str(cleaned_data)
+
+# Convert all character columns to factors to represent categorical data
+cleaned_data <- cleaned_data %>%
+  mutate(across(where(is.character), as.factor))
+
+# Check factorization of each column
+str(cleaned_data)
+
+# Removing duplicate rows from the dataset, keeping only unique rows
+cleaned_data <- cleaned_data %>% distinct()
+
+cleaned_data
+
+# Select only the numeric columns for the pairs plot
+numerical_data <- cleaned_data[sapply(cleaned_data, is.numeric) ]
+
+# Use ggpairs to create the pairs plot, displaying both scatter plots and correlations
+pairs(numerical_data)
+
+# Calculate correlation matrix for numerical columns
+cor_matrix <- cor(numerical_data, use = "complete.obs")
+
+cor_matrix
+
+# Creating a new binary variable 'ObesityBinary' where 1 indicates Obesity (I, II, III) and 0 indicates otherwise
+cleaned_data$ObesityBinary <- ifelse(cleaned_data$Nobesity %in% c("Obesity_Type_I", "Obesity_Type_II", "Obesity_Type_III"), 1, 0)
+
+set.seed(123) # for reproducibility
+
+# Calculate the size of the training set (80% of the dataset)
+training_size <- floor(0.8 * nrow(cleaned_data))
+
+# Sample indices for the training data
+training_indices <- sample(seq_len(nrow(cleaned_data)), size = training_size)
+
+# Split the data
+train_data <- cleaned_data[training_indices, ]
+test_data <- cleaned_data[-training_indices, ]
+```
+
+## Data distribution for a binary variable *ObesityBinary*
+
+```{r}
+# Print the number of cases and percentage distribution for training data
+table_train <- table(train_data$ObesityBinary)
+cat(sprintf("Training data - 'ObesityBinary' categories and percentages:\n Counts: %s, Percentages: %s\n", 
+            paste(names(table_train), table_train, sep=": ", collapse=", "), 
+            paste(names(table_train), round(prop.table(table_train) * 100, 2), sep=": ", collapse=", ") ))
+
+# Print the number of cases and percentage distribution for test data
+table_test <- table(test_data$ObesityBinary)
+cat(sprintf("Test data - 'ObesityBinary' categories and percentages:\n Counts: %s, Percentages: %s\n", 
+            paste(names(table_test), table_test, sep=": ", collapse=", "), 
+            paste(names(table_test), round(prop.table(table_test) * 100, 2), sep=": ", collapse=", ") ))
+```
+
+The output shows that the training and test datasets have a **similar distribution** of the ObesityBinary variable, where approximately **53%** of the cases belong to category **0** and about **47%** to category **1**. This near-even distribution indicates that the datasets are **well-balanced** between the two categories. Given this balance, there is **no need** for adjustments regarding class balancing techniques such as oversampling or undersampling, which are often used when one class significantly outnumbers the other. This **consistency** in distribution across both datasets ensures that any model trained on this data is **less** likely to be biased towards a particular class, providing a **fair** representation for both categories.
+
+# Hypothesis
+
+**Null Hypothesis (H0):** There is no significant relationship between the risk of obesity and the independent variables of frequency of consuming high-calorie food, number of main meals, consumption of food between meals, alcohol consumption, age, and gender. These variables do not significantly contribute to predicting whether an individual is at risk of obesity or not.
+
+**Alternative Hypothesis (H1):** There is a significant relationship between the risk of obesity and the independent variables of frequency of consuming high-calorie food, number of main meals, consumption of food between meals, alcohol consumption, age, and gender. These factors collectively serve as significant predictors in classifying individuals into categories indicating their risk of obesity.
+
+We aim to classify individuals into binary obesity levels (1 if Obesity I/II/III, otherwise 0) by analyzing their eating habits, physical condition, and demographic information.
+
+# Selection of classification methods
+
+We chose the following classification methods based on their characteristics because:
+
+* **LDA** works efficiently with linear separability and normal distribution assumptions, ideal for balanced classes to reduce complexity and improve speed.
+* **SVM** excels at creating optimal hyperplanes, especially beneficial in balanced datasets where overfitting the majority class is less of a concern, allowing for accurate and robust classification.
+* **Naive Bayes** is effective in high-dimensional spaces and when predictors are independent, requiring less data to estimate parameters, making it scalable and fast.
+
+These models leverage the balanced class distribution to perform optimally, avoiding biases toward a dominant class and enhancing overall model accuracy and generalizability.
+
+# LDA
+
+The Linear Discriminant Analysis (LDA) model for predicting obesity status based on dietary habits, alcohol consumption, age, and gender demonstrates a good performance in classification.
+
+```{r}
+# Creating LDA model
+lda_model <- lda(ObesityBinary ~ FreqConsHighCalFood + NumMainMeals + ConsFoodBetwMeals + ConsAlc + Age + Gender, data = train_data)
+
+# Printing model results
+print(summary(lda_model))
+
+# Predicting on the test set, obtaining probabilities
+lda_probabilities <- predict(lda_model, newdata = test_data, type = "response")$posterior[,2]
+
+# Setting the threshold
+threshold <- 0.55  # This threshold means that probabilities above 0.6 will be classified as positive
+
+# Applying threshold to predictions
+predicted_classes <- ifelse(lda_probabilities > threshold, 1, 0)
+
+# Creating and printing confusion matrix
+lda_conf_matrix <- table(Predicted = predicted_classes, Actual = test_data$ObesityBinary)
+print(lda_conf_matrix)
+
+# Calculating accuracy and other metrics
+accuracy <- sum(predicted_classes == test_data$ObesityBinary) / nrow(test_data)
+print(paste("Accuracy:", accuracy))
+
+# Calculating additional metrics using the caret package
+library(caret)
+confusionMatrix(lda_conf_matrix)
+
+```
+
+Key outcomes from the LDA model:
+
+* The model has an **Accuracy** rate of 71.39%, indicating that it correctly predicts the obesity status for approximately 71 out of 100 cases in the test data
+* **Sensitivity** at **66.82%**, the model has a **moderate** ability to correctly identify those with obesity
+* With a **specificity** of **76.68%**, the model is **reasonably** effective at correctly identifying those without obesity
+* The **Precision** is **76.80%**, which reflects the probability that subjects with a positive screening test truly have obesity
+* The **Negative Predictive Value** is **66.67%**, showing the probability that subjects with a negative screening test truly don't have obesity
+* The **balanced accuracy** is **71.75%**, which averages the model's sensitivity and specificity, accounting for potential class imbalance
+* A **kappa** of **0.4306** suggests a **moderate agreement** between the model predictions and actual data, **above** what would be expected by **chance** alone
+* The **p-value** of **0.01027** from Mcnemar's test indicates there is a statistically **significant** difference between the number of false positives and false negatives
+
+In summary, the LDA model performs well and can be a useful tool for predicting obesity status in the given context, although there is some room for improvement, especially in reducing false negatives.
+
+# SVM
+
+The Support Vector Machine (SVM) with a radial kernel is applied to classify a binary variable, ObesityBinary, based on several features such as frequency of consuming high-calorie food, number of main meals, consumption of food between meals, alcohol consumption, age, and gender.
+
+```{r}
+# Creating an SVM model with a radial kernel
+svm_model <- svm(ObesityBinary ~ FreqConsHighCalFood + NumMainMeals + ConsFoodBetwMeals + ConsAlc + Age + Gender, 
+                 data = train_data, 
+                 type = 'C-classification', 
+                 kernel = 'radial', 
+                 probability = TRUE)  # Enabling probabilities
+
+# Printing model results
+print(summary(svm_model))
+
+# Predicting on the test set, obtaining probabilities
+svm_probabilities <- predict(svm_model, newdata = test_data, probability = TRUE)
+svm_probabilities <- attr(svm_probabilities, "probabilities")[,2]
+
+# Setting the threshold
+threshold <- 0.55
+
+# Applying the threshold to predictions
+svm_predicted_classes <- ifelse(svm_probabilities > threshold, 1, 0)
+
+# Creating and printing confusion matrix
+svm_conf_matrix <- table(Predicted = svm_predicted_classes, Actual = test_data$ObesityBinary)
+print(svm_conf_matrix)
+
+# Calculating accuracy
+svm_accuracy <- sum(svm_predicted_classes == test_data$ObesityBinary) / nrow(test_data)
+print(paste("Accuracy:", svm_accuracy))
+
+# Calculating additional metrics using the caret package
+library(caret)
+svm_confusionMatrix <- confusionMatrix(svm_conf_matrix)
+print(svm_confusionMatrix)
+```
+
+Key outcomes from the SVM model:
+
+* The SVM model uses a **radial** kernel with the default cost parameter **1**
+* The model produced **957** support vectors, nearly evenly split between the two classes (480 for one class and 477 for the other)
+* The dataset is divided into two classes (0 and 1)
+* With a threshold set at **0.55**, the model's predictions on the test set resulted in a confusion matrix showing:
+  + 152 true negatives
+  + 166 true positives
+  + 71 false negatives
+  + 27 false positives
+* The overall **accuracy** of the model is approximately **76.44%**
+* The model's **sensitivity** is **68.16%**
+* The model's **specificity** is **86.01%**
+* The model's **Precision** is **84.92%**
+* The model's **negative predictive value** is **70.04%**
+* The **balanced accuracy**, which accounts for both sensitivity and specificity, was **77.09%**
+* The model significantly **outperformed** the no information rate, which is the accuracy that could be achieved by always predicting the most frequent class
+* The statistical test (Mcnemar's Test) **suggests** that there is a **significant** difference between the number of false positives and false negatives produced by the model
+
+Overall, the SVM model with a radial kernel showed a fairly high level of accuracy, a good balance between sensitivity and specificity, and strong predictive values, suggesting it performs well for this particular classification task. The radial basis function (RBF) kernel, was chosen for the SVM model due to its flexibility in handling data where the boundary between classes is not linear.
+
+
+# Naive Bayse
+
+The Naive Bayes model was created to predict a binary target variable, ObesityBinary, based on various predictors including the frequency of consuming high-calorie food, the number of main meals, consumption of food between meals, alcohol consumption, age, and gender.
+
+```{r}
+# Creating Naive Bayes model
+nb_model <- naiveBayes(ObesityBinary ~ FreqConsHighCalFood + NumMainMeals + ConsFoodBetwMeals + ConsAlc + Age + Gender, 
+                       data = train_data)
+
+# Printing model results
+print(summary(nb_model))
+
+# Predicting on the test set, obtaining probabilities
+nb_probabilities <- predict(nb_model, newdata = test_data, type = "raw")[,2]
+
+# Setting the threshold
+threshold <- 0.65
+
+# Applying the threshold to predictions
+nb_predicted_classes <- ifelse(nb_probabilities > threshold, 1, 0)
+
+# Creating and printing confusion matrix
+nb_conf_matrix <- table(Predicted = nb_predicted_classes, Actual = test_data$ObesityBinary)
+print(nb_conf_matrix)
+
+# Calculating accuracy
+nb_accuracy <- sum(nb_predicted_classes == test_data$ObesityBinary) / nrow(test_data)
+print(paste("Accuracy:", nb_accuracy))
+
+# Calculating additional metrics using the caret package
+nb_confusionMatrix <- confusionMatrix(nb_conf_matrix)
+print(nb_confusionMatrix)
+```
+
+Key outcomes from the Naive Bayse model:
+
+* Using a threshold of **0.65** for classification, the confusion matrix shows:
+  + 166 true negatives
+  + 127 true positives
+  + 57 false negatives
+  + 66 false positives
+* The model achieved an **accuracy** of about **70.43%**
+* The **sensitivity** of the model is **74.44%**, and the **specificity** is **65.80%**
+* The **precision** is **71.55%**, and the **negative predictive value** is **69.02%**
+* The **balanced accuracy**, which is the average of sensitivity and specificity, is **70.12%**
+* The **kappa statistic** is **0.4037**, indicating **moderate** agreement between the predicted and actual values.
+* Mcnemar's test has a **p-value** of **0.4707**, suggesting there is **no significant** bias in the number of false positives compared to false negatives
+* The 'Positive' class is labeled as 0.
+
+The Naive Bayes classifier performs reasonably well, with an accuracy significantly higher than the no information rate. The balance between sensitivity and specificity suggests the model is fair at discriminating both classes. However, further improvements may be necessary to increase its predictive performance.
+
+# Model performance parameters
+
+```{r}
+# Calculate metrics using confusionMatrix and store the results
+lda_cm <- confusionMatrix(lda_conf_matrix)
+svm_cm <- confusionMatrix(svm_conf_matrix)
+nb_cm <- confusionMatrix(nb_conf_matrix)
+
+# Create summary table
+model_summary <- data.frame(
+  Model = c("LDA", "SVM", "Naive Bayes"),
+  Accuracy = c(lda_cm$overall['Accuracy'], svm_cm$overall['Accuracy'], nb_cm$overall['Accuracy']),
+  Sensitivity = c(lda_cm$byClass['Sensitivity'], svm_cm$byClass['Sensitivity'], nb_cm$byClass['Sensitivity']),
+  Specificity = c(lda_cm$byClass['Specificity'], svm_cm$byClass['Specificity'], nb_cm$byClass['Specificity']),
+  F1_Score = c(lda_cm$byClass['F1'], svm_cm$byClass['F1'], nb_cm$byClass['F1'])
+)
+
+# Calculate AUC for each model
+lda_auc <- roc(response = test_data$ObesityBinary, predictor = lda_probabilities)$auc
+svm_auc <- roc(response = test_data$ObesityBinary, predictor = svm_probabilities)$auc
+nb_auc <- roc(response = test_data$ObesityBinary, predictor = nb_probabilities)$auc
+
+# Add AUC values to the summary table
+model_summary$AUC <- c(lda_auc, svm_auc, nb_auc)
+
+# Print summary table
+print(model_summary)
+
+# ROC analysis for each model
+lda_roc <- roc(test_data$ObesityBinary, lda_probabilities)
+svm_roc <- roc(test_data$ObesityBinary, svm_probabilities)
+nb_roc <- roc(test_data$ObesityBinary, nb_probabilities)
+
+# Plot ROC curves
+plot(lda_roc, main="ROC Curves", col="red")
+lines(svm_roc, col="blue")
+lines(nb_roc, col="green")
+legend("bottomright", legend=c("LDA", "SVM", "Naive Bayes"), col=c("red", "blue", "green"), lwd=2)
+```
+
+### Accuracy
+This metric reflects the overall correctness of the model, representing the ratio of correct predictions to total predictions.
+
+* LDA: 71.39%
+* SVM: 76.44%
+* Naive Bayes: 70.43%
+
+### Sensitivity (Recall or True Positive Rate)
+Indicates how well the model identifies actual positives.
+
+* LDA: 66.82%
+* SVM: 68.16%
+* Naive Bayes: 74.44%
+
+### Specificity (True Negative Rate)
+Shows how well the model identifies actual negatives.
+
+* LDA: 76.68%
+* SVM: 86.01%
+* Naive Bayes: 65.80%
+
+### F1 Score
+The harmonic mean of precision and sensitivity, giving a balance of both in cases where one might be more important than the other.
+
+* LDA: 71.46%
+* SVM: 75.62%
+* Naive Bayes: 72.97%
+
+### AUC (Area Under the ROC Curve)
+Reflects the model's ability to discriminate between the positive and negative classes. The closer to 1, the better the model is at predicting positive classes as positive and negative classes as negative.
+
+* LDA: 76.19%
+* SVM: 84.30%
+* Naive Bayes: 77.42%
+
+From these metrics we can tell that:
+
+* **SVM** is the **best** performer in terms of accuracy, specificity, F1 score, and AUC, which suggests it's the **most balanced** model overall among the three.
+* **Naive Bayes** has the **highest** sensitivity, meaning it is the **best at identifying positive cases**, but it **lags** in specificity, indicating it may **misclassify** more negative cases as positive.
+* **LDA** offers **moderate** performance across all metrics, with no extremes in sensitivity or specificity, suggesting a **balanced** but **less** accurate prediction compared to SVM.
+
+
+# Conclusion
+
+Based on the summary table of model performance metrics, the outcome suggests support for the Alternative Hypothesis (H1) that there is a significant relationship between the risk of obesity and the independent variables of frequency of consuming high-calorie food, number of main meals, consumption of food between meals, alcohol consumption, age, and gender. These variables indeed appear to contribute significantly to predicting the risk of obesity, as indicated by the model outcomes:
+
+* All models demonstrate a reasonably high accuracy (over 70% for each), suggesting they effectively predict obesity risk based on the specified variables.
+* The models show varied sensitivity and specificity, indicating they are able to identify both true positives and true negatives with considerable effectiveness. Particularly, SVM shows a high specificity of 86%, demonstrating strong capability in correctly identifying individuals not at risk.
+* The F1 scores are also robust, particularly for the SVM model at 0.756, suggesting a good balance between precision and recall, important when both false positives and false negatives carry significant consequences.
+* The AUC values for all models are well above 0.75, with SVM performing exceptionally at 0.843. This indicates excellent model discrimination ability, where higher AUC values represent better performance in distinguishing between those at risk of obesity and those not.
+
+These metrics collectively indicate that the models, utilizing these specific predictors, are effective at classifying individuals based on their risk of obesity, thereby providing substantial evidence against the Null Hypothesis (H0) and in favor of the Alternative Hypothesis (H1).
+
+
+### Tuning
+
+We recognized that Linear Discriminant Analysis (LDA) lacks tunable hyperparameters because it operates based on fixed assumptions like normal distribution and equal covariance across classes. Due to this, traditional hyperparameter tuning is not applicable for LDA.
+
+Instead, we focused on adjusting the decision threshold to optimize the all models. This method allowed us to control the sensitivity and specificity of the models by changing the probability cutoff for classifying observations. By fine-tuning this threshold, we tailored the performance of the models to better meet our specific evaluation criteria, effectively optimizing our model's effectiveness within the constraints of our project.
+
+### Formula
+
+We chose to use the same formula (ObesityBinary ~ FreqConsHighCalFood + NumMainMeals + ConsFoodBetwMeals + ConsAlc + Age + Gender) for every model to ensure consistency in variable selection and to directly compare model performance. By applying the same predictors across SVM, LDA, and Naive Bayes, we isolated the effect of the modeling techniques on the outcomes. This approach allowed us to attribute any performance differences solely to the models’ inherent capabilities, rather than variable selection, enabling an effective evaluation of each model’s strengths and weaknesses under identical conditions.
+
+### Predictor combinations
+
+In our analysis, we experimented with various combinations of predictors from a total of 17 available parameters. Through iterative testing, we assessed the impact of different predictor sets on model performance. We ultimately converged on the combination of FreqConsHighCalFood, NumMainMeals, ConsFoodBetwMeals, ConsAlc, Age, and Gender as the most effective. This specific set of predictors provided the best balance of model accuracy and interpretability, yielding the most consistent and insightful results across different models. Given our limited set of 17 parameters, our selection was also influenced by the need to avoid overfitting while capturing the most significant predictors for our target variable.
+
+### Comparison with Project 1
+The new models — LDA, SVM, and Naive Bayes—show improvements over the original model across several key performance metrics:
+
+* Each new model demonstrates higher accuracy than the original model (68.75%). SVM shows the most significant improvement with an accuracy of 76.44%, followed by LDA (71.39%) and Naive Bayes (70.43%).
+* The Naive Bayes model outperforms the original model's recall significantly (74.44% vs. 55.16%), suggesting better identification of true positives. LDA and SVM also show improvements in this area.
+* While the original model had a high specificity of 84.46%, SVM surpasses this with 86.01%. LDA's specificity is slightly lower than the original, and Naive Bayes shows a noticeable decrease.
+* All new models have higher F1 scores than the original (65.43%), indicating a better balance between precision and recall. SVM stands out with the highest F1 score of 75.62%.
+* Each new model also shows an increase in AUC, indicating superior ability to distinguish between classes. SVM again leads with an impressive AUC of 84.30%.
+
+Overall, the new models provide a more accurate and balanced approach to predicting obesity risk compared to the original model, with SVM showing the strongest performance enhancements across the board.
