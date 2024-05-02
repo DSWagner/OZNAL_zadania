@@ -1,0 +1,240 @@
+---
+title: "Semestral Project: Analysis of Obesity Levels"
+author: "David Wagner, Viktor Klíma"
+date: "`r format(Sys.Date(), '%d.%m.%Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+# Introduction
+
+TODO
+
+
+# Data Loading and Preprocessing
+
+To initiate our analysis, the first step involves loading the dataset into our R environment. This dataset, stored as "ObesityDataSet.csv", encapsulates vital information on obesity levels among individuals from specific Latin American countries. Our analysis begins by setting the working directory to where the dataset is located and subsequently loading the dataset into R for inspection and preprocessing.
+
+```{r load-data, message=FALSE, warning=FALSE}
+library(readr)
+library(tidyverse)
+library(lobstr)
+library(dplyr)
+library(ggplot2)
+library(magrittr)
+library(data.table)
+library(caret)
+library(MASS)
+library(purrr)
+library(GGally)
+library(ggplot2)
+library(gplots)
+library(pROC)
+library(kernlab)
+library(stats)
+library(e1071)
+library(igraph)
+library(ggraph)
+
+
+# Setting the working directory to where the dataset is located
+# Uncomment the appropriate line below to match your directory structure
+# setwd("C:/Users/dswag/Desktop/Zadania/OZNAL/Data")
+setwd("C:/work/oznal/OZNAL_zadania/Data")
+
+# Listing all files in the current working directory to verify the presence of our dataset
+list.files()
+
+# Reading the dataset into R
+raw_data <- read_csv("ObesityDataSet.csv", col_names = TRUE, num_threads = 4)
+
+# Displaying the first few rows of the dataset to ensure it's loaded correctly
+head(raw_data)
+
+
+# Renaming columns in the dataset to make them more descriptive
+names(raw_data)[names(raw_data) == "FAVC"] <- "FreqConsHighCalFood"
+names(raw_data)[names(raw_data) == "FCVC"] <- "FreqConsVegs"
+names(raw_data)[names(raw_data) == "NCP"] <- "NumMainMeals"
+names(raw_data)[names(raw_data) == "CAEC"] <- "ConsFoodBetwMeals"
+names(raw_data)[names(raw_data) == "CH2O"] <- "ConsWaterDaily"
+names(raw_data)[names(raw_data) == "CALC"] <- "ConsAlc"
+names(raw_data)[names(raw_data) == "SCC"] <- "CalsConsMon"
+names(raw_data)[names(raw_data) == "FAF"] <- "PhysActFreq"
+names(raw_data)[names(raw_data) == "TUE"] <- "TimeTechDev"
+names(raw_data)[names(raw_data) == "MTRANS"] <- "Trans"
+names(raw_data)[names(raw_data) == "family_history_with_overweight"] <- "ObesityFam"
+
+# Identifying missing values in dataset
+cleaned_data <- raw_data
+
+# Check data types of each column
+str(cleaned_data)
+```
+
+The dataset contains the following columns with a mix of numerical and categorical data:
+
+* **Gender**: Categorical (Male, Female)
+* **Age**: Numerical
+* **Height**: Numerical
+* **Weight**: Numerical
+* **ObesityFam**: Categorical (yes, no)
+* **FreqConsHighCalFood**: Frequent consumption of high caloric food (yes, no)
+* **FreqConsVegs**: Frequency of vegetables consumption (numerical scale)
+* **NumMainMeals**: Number of main meals (numerical scale)
+* **ConsFoodBetwMeals**: Consumption of food between meals (Sometimes, Frequently, Always, no)
+* **SMOKE**: Categorical (yes, no)
+* **ConsWaterDaily**: Intake of water daily (numerical scale)
+* **CalsConsMon**: Calories consumption monitoring (yes, no)
+* **PhysActFreq**: Physical activity frequency (numerical scale)
+* **TimeTechDev**: Time using technology devices (numerical scale)
+* **CALC**: Consumption of alcohol (no, Sometimes, Frequently, Always)
+* **Trans**: Mode of Transport (Public Transport, Walking, Automobile, Motorbike, Bike)
+* **Nobesity**: Categorical (different levels of obesity)
+
+### Nodes
+
+To construct the Bayesian network, we need to select variables that could logically influence each other. Based on the variables available, here's a selection for the nodes in our network:
+
+1. Gender
+2. Age
+3. ObesityFam
+4. FreqConsHighCalFood
+5. FreqConsVegs
+6. PhysActFreq
+7. Nobesity (target variable for predictions)
+
+### Relationships
+
+1. Gender -> Nobesity
+2. Age -> Nobesity
+3. ObesityFam -> Nobesity
+4. FreqConsHighCalFood -> Nobesity
+5. FreqConsVegs -> Nobesity
+6. PhysActFreq -> Nobesity
+7. FreqConsHighCalFood -> FreqConsVegs (Assuming that frequent high caloric food consumption influences vegetable consumption)
+8. Age -> PhysActFreq (Assuming older people might exercise differently)
+9. Gender -> PhysActFreq (Potential differences in physical activity patterns by gender)
+10. FreqConsHighCalFood -> PhysActFreq (Diet may influence exercise habits)
+
+### Marketing and Sales Questions
+
+
+
+
+#### Join Probability
+> What is the probability of observing a male, with a family history of overweight, who frequently consumes high caloric foods and is obese?
+
+#### Marginal Probability
+> What is the probability distribution of obesity levels across different age groups?
+
+#### Conditional Probability
+> Given that an individual does not consume high caloric food frequently and has a low frequency of vegetable consumption, what is the probability of being obese?
+
+#### Conditional Probability
+> What is the probability of obesity given the gender and exercise frequency?
+
+#### Additional Query
+> How does the mode of transport influence obesity levels?
+
+```{r}
+# Create a directed graph for the Bayesian Network
+bn_graph <- graph(edges = c(
+  'Gender', 'Nobesity',
+  'Age', 'Nobesity',
+  'ObesityFam', 'Nobesity',
+  'FAVC', 'Nobesity',
+  'FCVC', 'Nobesity',
+  'FAF', 'Nobesity',
+  'FAVC', 'FCVC',
+  'Age', 'FAF',
+  'Gender', 'FAF',
+  'FAVC', 'FAF'
+), directed = TRUE)
+
+positions <- matrix(c(
+  1, 2,  # x, y for 'Gender'
+  1.5, 0,  # x, y for 'Nobesity'
+  2, 2,  # x, y for 'Age'
+  3, 2,  # x, y for 'ObesityFam'
+  0, 1,  # x, y for 'FAVC'
+  1, 1,  # x, y for 'FCVC'
+  2, 1   # x, y for 'FAF'
+), ncol = 2, byrow = TRUE)
+
+# Plot the graph using a tree layout
+plot(bn_graph, layout = positions, edge.arrow.size = 0.5, vertex.color = "skyblue", 
+     vertex.size = 50, vertex.frame.color = "skyblue", vertex.label.color = "black", 
+     vertex.label.cex = 0, vertex.label.dist = 0)
+```
+
+Here is the visual representation of the Bayesian Network based on the relationships we discussed. This graph illustrates how different factors such as Gender, Age, family history of overweight (ObesityFam), frequent high caloric food consumption (FAVC), frequency of vegetable consumption (FCVC), and physical activity frequency (FAF) are hypothesized to influence obesity levels (Nobesity).
+
+
+#### Defining Probability Distributions
+
+1. **Gender, ObesityFam, FAVC, SMOKE, SCC, CALC, MTRANS, Nobesity**: These are categorical variables for which we are going to use frequency counts from the dataset to establish probability distributions.
+
+2. **Age, Height, Weight, FCVC, NCP, CH2O, FAF, TUE**: These are continuous or ordinal variables where we are going, for simplicity, discretize them and treat as categorical for this analysis.
+
+Let's start by calculating some simple probability distributions for a few selected nodes. We'll calculate:
+
+* The probability distribution of Nobesity based on the dataset.
+* The probability distribution of Gender.
+* The conditional probability distribution of Nobesity given Gender.
+
+```{r}
+# Calculate probability distributions for Nobesity and Gender
+prob_nobesity <- prop.table(table(cleaned_data$Nobesity))
+prob_gender <- prop.table(table(cleaned_data$Gender))
+
+# Calculate conditional probability P(Nobesity | Gender)
+prob_nobesity_given_gender <- cleaned_data %>%
+  group_by(Gender, Nobesity) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  mutate(total = sum(count, na.rm = TRUE)) %>%
+  group_by(Gender) %>%
+  mutate(prob = count / total) %>%
+  ungroup() %>%
+  spread(key = Nobesity, value = prob)
+
+# Display the results
+prob_nobesity
+prob_gender
+prob_nobesity_given_gender
+
+```
+
+#### Probability Distribution of Obesity Levels (Nobesity)
+* Insufficient Weight: 12.88%
+* Normal Weight: 13.60%
+* Overweight Level I: 13.74%
+* Overweight Level II: 13.74%
+* Obesity Type I: 16.63%
+* Obesity Type II: 14.07%
+* Obesity Type III: 15.35%
+
+#### Probability Distribution of Gender
+* Male: 50.59%
+* Female: 49.41%
+
+#### Conditional Probability Distribution of Obesity Levels Given Gender
+##### For Females:
+* Insufficient Weight: 16.59%
+* Normal Weight: 13.52%
+* Overweight Level I: 13.90%
+* Overweight Level II: 9.88%
+* Obesity Type I: 14.96%
+* Obesity Type II: 0.19%
+* Obesity Type III: 30.97%
+
+##### For Males:
+* Insufficient Weight: 9.27%
+* Normal Weight: 13.67%
+* Overweight Level I: 13.58%
+* Overweight Level II: 17.51%
+* Obesity Type I: 18.26%
+* Obesity Type II: 27.62%
+* Obesity Type III: 0.09%
