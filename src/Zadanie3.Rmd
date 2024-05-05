@@ -37,6 +37,9 @@ library(stats)
 library(e1071)
 library(igraph)
 library(ggraph)
+library(knitr)
+library(kableExtra)
+
 
 
 # Setting the working directory to where the dataset is located
@@ -55,43 +58,58 @@ head(raw_data)
 
 
 # Renaming columns in the dataset to make them more descriptive
-names(raw_data)[names(raw_data) == "FAVC"] <- "FreqConsHighCalFood"
-names(raw_data)[names(raw_data) == "FCVC"] <- "FreqConsVegs"
-names(raw_data)[names(raw_data) == "NCP"] <- "NumMainMeals"
-names(raw_data)[names(raw_data) == "CAEC"] <- "ConsFoodBetwMeals"
-names(raw_data)[names(raw_data) == "CH2O"] <- "ConsWaterDaily"
-names(raw_data)[names(raw_data) == "CALC"] <- "ConsAlc"
-names(raw_data)[names(raw_data) == "SCC"] <- "CalsConsMon"
-names(raw_data)[names(raw_data) == "FAF"] <- "PhysActFreq"
-names(raw_data)[names(raw_data) == "TUE"] <- "TimeTechDev"
-names(raw_data)[names(raw_data) == "MTRANS"] <- "Trans"
-names(raw_data)[names(raw_data) == "family_history_with_overweight"] <- "ObesityFam"
+# names(raw_data)[names(raw_data) == "FAVC"] <- "FreqConsHighCalFood"
+# names(raw_data)[names(raw_data) == "FCVC"] <- "FreqConsVegs"
+# names(raw_data)[names(raw_data) == "NCP"] <- "NumMainMeals"
+# names(raw_data)[names(raw_data) == "CAEC"] <- "ConsFoodBetwMeals"
+# names(raw_data)[names(raw_data) == "CH2O"] <- "ConsWaterDaily"
+# names(raw_data)[names(raw_data) == "CALC"] <- "ConsAlc"
+# names(raw_data)[names(raw_data) == "SCC"] <- "CalsConsMon"
+# names(raw_data)[names(raw_data) == "FAF"] <- "PhysActFreq"
+# names(raw_data)[names(raw_data) == "TUE"] <- "TimeTechDev"
+# names(raw_data)[names(raw_data) == "MTRANS"] <- "Trans"
+# names(raw_data)[names(raw_data) == "family_history_with_overweight"] <- "ObesityFam"
 
-# Identifying missing values in dataset
 cleaned_data <- raw_data
 
-# Check data types of each column
+# Clean and standardize the FAF and FCVC columns by rounding the values to the nearest whole number
+cleaned_data$FAF <- round(cleaned_data$FAF)
+cleaned_data$FAF <- pmin(pmax(cleaned_data$FAF, 0), 3)
+cleaned_data$FCVC <- round(cleaned_data$FCVC)
+cleaned_data$FCVC <- pmin(pmax(cleaned_data$FCVC, 0), 3)
+
+# Create categorical factors from FAF, FCVC and Age
+cleaned_data$FAF <- ifelse(cleaned_data$FAF == 0, 'No activity',
+                            ifelse(cleaned_data$FAF == 1, 'Low activity',
+                                   ifelse(cleaned_data$FAF == 2, 'Moderate activity', 'High activity')))
+
+cleaned_data$FCVC <- ifelse(cleaned_data$FCVC == 1, 'Low consumption',
+                             ifelse(cleaned_data$FCVC == 2, 'Moderate consumption', 'High consumption'))
+
+cleaned_data <- cleaned_data %>%
+  mutate(across(where(is.character), as.factor))
+
 str(cleaned_data)
 ```
 
-The dataset contains the following columns with a mix of numerical and categorical data:
+The dataset contains the following columns:
 
 * **Gender**: Categorical (Male, Female)
-* **Age**: Numerical
+* **Age**: Categorical (Youth, Young Adult, Middle-Aged Adult, Senior)
 * **Height**: Numerical
 * **Weight**: Numerical
 * **ObesityFam**: Categorical (yes, no)
-* **FreqConsHighCalFood**: Frequent consumption of high caloric food (yes, no)
-* **FreqConsVegs**: Frequency of vegetables consumption (numerical scale)
-* **NumMainMeals**: Number of main meals (numerical scale)
-* **ConsFoodBetwMeals**: Consumption of food between meals (Sometimes, Frequently, Always, no)
+* **FreqConsHighCalFood**: Categorical (yes, no)
+* **FreqConsVegs**: Categorical (Low consumption, Moderate consumption, High consumption)
+* **NumMainMeals**: Numerical
+* **ConsFoodBetwMeals**: Categorical (Sometimes, Frequently, Always, no)
 * **SMOKE**: Categorical (yes, no)
-* **ConsWaterDaily**: Intake of water daily (numerical scale)
-* **CalsConsMon**: Calories consumption monitoring (yes, no)
-* **PhysActFreq**: Physical activity frequency (numerical scale)
-* **TimeTechDev**: Time using technology devices (numerical scale)
-* **CALC**: Consumption of alcohol (no, Sometimes, Frequently, Always)
-* **Trans**: Mode of Transport (Public Transport, Walking, Automobile, Motorbike, Bike)
+* **ConsWaterDaily**: Numerical
+* **CalsConsMon**: Categorical (yes, no)
+* **PhysActFreq**: Categorical (No activity, Low activity, Moderate activity, High activity)
+* **TimeTechDev**: Numerical
+* **CALC**: Categorical (No, Sometimes, Frequently, Always)
+* **Trans**: Categorical (Public Transport, Walking, Automobile, Motorbike, Bike)
 * **Nobesity**: Categorical (different levels of obesity)
 
 ### Nodes
@@ -99,142 +117,172 @@ The dataset contains the following columns with a mix of numerical and categoric
 To construct the Bayesian network, we need to select variables that could logically influence each other. Based on the variables available, here's a selection for the nodes in our network:
 
 1. Gender
-2. Age
+2. Trans
 3. ObesityFam
 4. FreqConsHighCalFood
 5. FreqConsVegs
 6. PhysActFreq
+8. CalsConsMon
 7. Nobesity (target variable for predictions)
 
 ### Relationships
 
 1. Gender -> Nobesity
-2. Age -> Nobesity
+2. Trans -> Nobesity
 3. ObesityFam -> Nobesity
 4. FreqConsHighCalFood -> Nobesity
 5. FreqConsVegs -> Nobesity
 6. PhysActFreq -> Nobesity
 7. FreqConsHighCalFood -> FreqConsVegs (Assuming that frequent high caloric food consumption influences vegetable consumption)
-8. Age -> PhysActFreq (Assuming older people might exercise differently)
+8. Trans -> PhysActFreq (Assuming people who transport by Automobile might exercise differently)
 9. Gender -> PhysActFreq (Potential differences in physical activity patterns by gender)
 10. FreqConsHighCalFood -> PhysActFreq (Diet may influence exercise habits)
+11. CalsConsMon -> FreqConsHighCalFood
+12. CalsConsMon -> FreqConsVegs
 
-### Marketing and Sales Questions
+$~$
 
+![](C:/work/oznal/OZNAL_zadania/Data/baysnetw.png) 
 
+$~$
 
+Here is the visual representation of the Bayesian Network based on the relationships we discussed. This graph illustrates how different factors such as Gender, Form of transformation (Trans), family history of overweight (ObesityFam), frequent high caloric food consumption (FAVC), frequency of vegetable consumption (FCVC), physical activity frequency (FAF) and the fact that individual is monitoring his calories (SCC) are hypothesized to influence obesity levels (Nobesity).
 
-#### Join Probability
-> What is the probability of observing a male, with a family history of overweight, who frequently consumes high caloric foods and is obese?
+# Sales marketing Questions
 
-#### Marginal Probability
-> What is the probability distribution of obesity levels across different age groups?
+### Joint Probability Question
+**What is the joint probability of being male, frequently consuming high caloric food, and being classified as Obesity Type II?**
+- **Objective**: This question aims to quantify the proportion of the population that is male, consumes high-calorie food frequently, and is classified as Obesity Type II.
+- **Application**: Knowing this probability can help businesses and health organizations tailor their nutrition or fitness programs to specifically target men who are most at risk due to their dietary habits. It's particularly useful for creating personalized diet plans or fitness regimens that cater to individuals with high caloric intake.
 
-#### Conditional Probability
-> Given that an individual does not consume high caloric food frequently and has a low frequency of vegetable consumption, what is the probability of being obese?
+### Marginal Probability Question
+**What is the probability distribution of obesity categories among individuals with a family history of overweight?**
+- **Objective**: This seeks to understand how the probability of being in various obesity categories (e.g., Insufficient Weight, Normal Weight, Overweight, Obesity Type I/II/III) is distributed among individuals who have a genetic predisposition to obesity.
+- **Application**: The findings from this analysis can be crucial for health marketers and product developers focusing on weight management solutions. It allows for more targeted marketing and product development strategies that consider genetic factors influencing obesity.
 
-#### Conditional Probability
-> What is the probability of obesity given the gender and exercise frequency?
+### Conditional Probability Questions
+1. **Given that an individual is female and frequently consumes alcohol, what is the probability that she falls into the Overweight or Obesity categories?**
+   - **Objective**: To determine how alcohol consumption influences weight categories among females.
+   - **Application**: This information is valuable for campaigns aimed at women, focusing on the impact of alcohol on weight gain. It can be used to tailor public health messages, develop specific interventions, or market low-calorie alcoholic beverages.
 
-#### Additional Query
-> How does the mode of transport influence obesity levels?
+2. **What is the probability of using public transportation given that an individual has a high frequency of consuming vegetables and is classified under Normal Weight?**
+   - **Objective**: To investigate the relationship between dietary habits, weight management, and the choice of transportation.
+   - **Application**: Insights derived could support urban planning and public transportation policies that promote accessibility to individuals leading a healthy lifestyle. It could also inform marketing strategies for public transport systems in areas with higher populations of health-conscious individuals.
 
-```{r}
-# Create a directed graph for the Bayesian Network
-bn_graph <- graph(edges = c(
-  'Gender', 'Nobesity',
-  'Age', 'Nobesity',
-  'ObesityFam', 'Nobesity',
-  'FAVC', 'Nobesity',
-  'FCVC', 'Nobesity',
-  'FAF', 'Nobesity',
-  'FAVC', 'FCVC',
-  'Age', 'FAF',
-  'Gender', 'FAF',
-  'FAVC', 'FAF'
-), directed = TRUE)
+3. **Given that an individual monitors calorie consumption and has a high physical activity frequency, what is the probability that they are not overweight?**
+   - **Objective**: To assess the effectiveness of calorie monitoring and frequent physical activity in maintaining a healthy weight.
+   - **Application**: This probability can validate the benefits of fitness tracking apps and dietary monitoring tools. It's crucial for companies that develop these technologies to showcase the effectiveness of their products in promoting a healthy lifestyle and preventing overweight and obesity.
 
-positions <- matrix(c(
-  1, 2,  # x, y for 'Gender'
-  1.5, 0,  # x, y for 'Nobesity'
-  2, 2,  # x, y for 'Age'
-  3, 2,  # x, y for 'ObesityFam'
-  0, 1,  # x, y for 'FAVC'
-  1, 1,  # x, y for 'FCVC'
-  2, 1   # x, y for 'FAF'
-), ncol = 2, byrow = TRUE)
+These questions, when answered, provide strategic insights that can be leveraged in various ways—from product development and marketing to public health initiatives and policy making. They help in understanding specific subsets of the population, enabling tailored approaches that are likely more effective than broad strategies.
 
-# Plot the graph using a tree layout
-plot(bn_graph, layout = positions, edge.arrow.size = 0.5, vertex.color = "skyblue", 
-     vertex.size = 50, vertex.frame.color = "skyblue", vertex.label.color = "black", 
-     vertex.label.cex = 0, vertex.label.dist = 0)
-```
+## Defining Probability Distributions
 
-Here is the visual representation of the Bayesian Network based on the relationships we discussed. This graph illustrates how different factors such as Gender, Age, family history of overweight (ObesityFam), frequent high caloric food consumption (FAVC), frequency of vegetable consumption (FCVC), and physical activity frequency (FAF) are hypothesized to influence obesity levels (Nobesity).
-
-
-#### Defining Probability Distributions
-
-1. **Gender, ObesityFam, FAVC, SMOKE, SCC, CALC, MTRANS, Nobesity**: These are categorical variables for which we are going to use frequency counts from the dataset to establish probability distributions.
-
-2. **Age, Height, Weight, FCVC, NCP, CH2O, FAF, TUE**: These are continuous or ordinal variables where we are going, for simplicity, discretize them and treat as categorical for this analysis.
-
-Let's start by calculating some simple probability distributions for a few selected nodes. We'll calculate:
-
-* The probability distribution of Nobesity based on the dataset.
-* The probability distribution of Gender.
-* The conditional probability distribution of Nobesity given Gender.
+Let's start by calculating probability distributions of each variable 
 
 ```{r}
-# Calculate probability distributions for Nobesity and Gender
-prob_nobesity <- prop.table(table(cleaned_data$Nobesity))
+# Calculate probability distributions
 prob_gender <- prop.table(table(cleaned_data$Gender))
-
-# Calculate conditional probability P(Nobesity | Gender)
-prob_nobesity_given_gender <- cleaned_data %>%
-  group_by(Gender, Nobesity) %>%
-  summarise(count = n(), .groups = 'drop') %>%
-  mutate(total = sum(count, na.rm = TRUE)) %>%
-  group_by(Gender) %>%
-  mutate(prob = count / total) %>%
-  ungroup() %>%
-  spread(key = Nobesity, value = prob)
-
-# Display the results
-prob_nobesity
-prob_gender
-prob_nobesity_given_gender
-
+prob_trans <- prop.table(table(cleaned_data$MTRANS))
+prob_obesityfam <- prop.table(table(cleaned_data$family_history_with_overweight))
+prob_FAVC <- prop.table(table(cleaned_data$FAVC))
+prob_FCVC <- prop.table(table(cleaned_data$FCVC))
+prob_FAF <- prop.table(table(cleaned_data$FAF))
+prob_scc <- prop.table(table(cleaned_data$SCC))
+prob_calc <- prop.table(table(cleaned_data$CALC))
+prob_nobesity <- prop.table(table(cleaned_data$Nobesity))
 ```
 
-#### Probability Distribution of Obesity Levels (Nobesity)
-* Insufficient Weight: 12.88%
-* Normal Weight: 13.60%
-* Overweight Level I: 13.74%
-* Overweight Level II: 13.74%
-* Obesity Type I: 16.63%
-* Obesity Type II: 14.07%
-* Obesity Type III: 15.35%
+```{r, echo=FALSE}
+# Display the results
+kable(prob_gender, caption = "Probability of Gender", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
+  kable_styling(position = "left")
 
-#### Probability Distribution of Gender
-* Male: 50.59%
-* Female: 49.41%
+kable(prob_trans, caption = "Probability of Form of transportation", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
+  kable_styling(position = "left")
 
-#### Conditional Probability Distribution of Obesity Levels Given Gender
-##### For Females:
-* Insufficient Weight: 16.59%
-* Normal Weight: 13.52%
-* Overweight Level I: 13.90%
-* Overweight Level II: 9.88%
-* Obesity Type I: 14.96%
-* Obesity Type II: 0.19%
-* Obesity Type III: 30.97%
+kable(prob_obesityfam, caption = "Probability of Family history with overweight", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
+  kable_styling(position = "left")
 
-##### For Males:
-* Insufficient Weight: 9.27%
-* Normal Weight: 13.67%
-* Overweight Level I: 13.58%
-* Overweight Level II: 17.51%
-* Obesity Type I: 18.26%
-* Obesity Type II: 27.62%
-* Obesity Type III: 0.09%
+kable(prob_FAVC, caption = "Probability of Consumtion frequency of high caloric food", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
+  kable_styling(position = "left")
+
+kable(prob_FCVC, caption = "Probability of Consumption frequency of vegetables", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
+  kable_styling(position = "left")
+
+kable(prob_FAF, caption = "Probability of frequency of physical activity", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
+  kable_styling(position = "left")
+
+kable(prob_scc, caption = "Probability of monitoring calorie intake", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
+  kable_styling(position = "left")
+
+kable(prob_nobesity, caption = "Probability of Obesity", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
+  kable_styling(position = "left")
+
+kable(prob_calc, caption = "Probability of consumtion of alcohol", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
+  kable_styling(position = "left")
+```
+
+## Calculations
+
+### 1) Joint Probability
+> What is the joint probability of being male, frequently consuming high caloric food, and being classified as Obesity Type II?
+
+![](C:/work/oznal/OZNAL_zadania/Data/vypocet1.pdf){width=100% height=1200}
+
+**0.0626056**
+
+This probability indicates the likelihood of an individual meeting all three conditions simultaneously: being male, frequently consuming high-caloric food, and being classified as Obesity Type II. It suggests that there is a moderate chance of observing such individuals within the population.
+
+For marketing purposes, it suggests potential target segments that may be interested in products or services related to managing obesity, such as weight loss programs, dietary supplements, or fitness equipment.
+
+### 2) Marginal Probability
+> What is the probability distribution of obesity categories among individuals with a family history of overweight?
+
+![](C:/work/oznal/OZNAL_zadania/Data/vypocet2.pdf){width=100% height=1200}
+
+The provided probabilities represent the distribution of different obesity categories among individuals who have a family history of overweight. Each probability corresponds to the likelihood of an individual falling into a specific obesity category given their family history of overweight. For example, the highest probability (0.1359517) suggests that Normal Weight is the most common obesity category among individuals with a family history of overweight.
+
+Understanding the distribution of obesity categories within this group allows marketers to prioritize their efforts. For example, if Normal Weight individuals constitute the majority, marketing efforts may focus on preventive health measures or products catering to maintaining a healthy weight.
+
+### 3) Conditional Probability
+> Given that an individual is female and frequently consumes alcohol, what is the probability that she falls into the Overweight or Obesity categories?
+
+![](C:/work/oznal/OZNAL_zadania/Data/vypocet3.pdf){width=100% height=2400}
+
+**0.7351970**
+
+This probability indicates the likelihood of an individual, who is female and frequently consumes alcohol, falling into the Overweight or Obesity categories. It suggests a relatively high probability, implying that females who frequently consume alcohol are more likely to be classified as Overweight or Obese.
+
+Marketers can use this insight to tailor messaging or develop products targeting this specific segment, such as low-calorie alcoholic beverages or fitness programs aimed at weight management.
+
+### 4) Conditional Probability
+>What is the probability of using public transportation given that an individual has a high frequency of consuming vegetables and is classified under Normal Weight?
+
+![](C:/work/oznal/OZNAL_zadania/Data/vypocet4.pdf){width=100% height=2400}
+
+**0.6006884**
+
+This probability represents the likelihood of an individual using public transportation given that they have a high frequency of consuming vegetables and are classified under Normal Weight. It suggests that there is a moderate chance that individuals meeting these conditions prefer public transportation as their mode of commuting.
+
+Marketers can target this segment with advertisements for eco-friendly products or services, such as sustainable transportation options or environmentally conscious brands.
+
+### 5) Conditional Probability
+>Given that an individual monitors calorie consumption and has a high physical activity frequency, what is the probability that they are not overweight?
+
+![](C:/work/oznal/OZNAL_zadania/Data/vypocet5.pdf){width=100% height=3600}
+
+**0.0869251**
+
+This probability indicates the likelihood of an individual, who monitors calorie consumption and has a high frequency of physical activity, not being overweight. It suggests a relatively low probability, implying that even with these healthy lifestyle habits, there's still a considerable chance of being overweight.
+
+Marketers can use this insight to position their products or services as complementary to a healthy lifestyle rather than solely focusing on weight loss. For example, promoting fitness gear or nutrition supplements as aids in maintaining overall health and well-being.
+
+# Conlusion
+
+**Segment Identification and Prioritization**: Understanding the likelihood of specific consumer characteristics or behaviors allows marketers to identify potential target segments and prioritize their marketing efforts accordingly. By focusing on segments with higher probabilities of certain traits or behaviors, marketers can allocate resources more effectively to reach the most receptive audience.
+
+**Segment Targeting and Tailored Messaging**: The probabilities provide insights into the preferences and behaviors of different consumer segments. Marketers can use this information to tailor their messaging and develop targeted campaigns that resonate with specific audience segments. By addressing the unique needs and preferences of each segment, marketers can increase the effectiveness of their marketing efforts and enhance consumer engagement.
+
+**Behavioral Targeting and Product Positioning**: Understanding the relationship between consumer behaviors and outcomes enables marketers to target specific segments more effectively and position their products or services accordingly. By aligning marketing strategies with consumer behaviors and preferences, marketers can create more compelling value propositions and differentiate their offerings in the market.
+
+Overall, these probabilities offer valuable insights that can inform marketing strategies and decision-making processes. By leveraging this data effectively, marketers can optimize their efforts, maximize their return on investment, and better meet the needs and preferences of their target audience.
