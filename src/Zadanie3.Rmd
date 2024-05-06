@@ -1,5 +1,5 @@
 ---
-title: "Semestral Project: Analysis of Obesity Levels"
+title: "Semestral Project: Belief network"
 author: "David Wagner, Viktor Klíma"
 date: "`r format(Sys.Date(), '%d.%m.%Y')`"
 output: 
@@ -10,8 +10,7 @@ output:
 
 # Introduction
 
-TODO
-
+In today's data-driven landscape, understanding the intricate relationships between various factors is vital for effective marketing strategies. Leveraging data analytics, this project aims to construct a discrete Bayesian network to unveil causal relationships between key variables. By asking meaningful questions, we seek to uncover hidden insights that can drive impactful marketing decisions. These insights offer businesses a competitive edge, making investments in data analytics expertise invaluable. Join us as we explore the power of probabilistic modeling to unlock the full potential of data assets.
 
 # Data Loading and Preprocessing
 
@@ -58,33 +57,33 @@ head(raw_data)
 
 
 # Renaming columns in the dataset to make them more descriptive
-# names(raw_data)[names(raw_data) == "FAVC"] <- "FreqConsHighCalFood"
-# names(raw_data)[names(raw_data) == "FCVC"] <- "FreqConsVegs"
-# names(raw_data)[names(raw_data) == "NCP"] <- "NumMainMeals"
-# names(raw_data)[names(raw_data) == "CAEC"] <- "ConsFoodBetwMeals"
-# names(raw_data)[names(raw_data) == "CH2O"] <- "ConsWaterDaily"
-# names(raw_data)[names(raw_data) == "CALC"] <- "ConsAlc"
-# names(raw_data)[names(raw_data) == "SCC"] <- "CalsConsMon"
-# names(raw_data)[names(raw_data) == "FAF"] <- "PhysActFreq"
-# names(raw_data)[names(raw_data) == "TUE"] <- "TimeTechDev"
-# names(raw_data)[names(raw_data) == "MTRANS"] <- "Trans"
-# names(raw_data)[names(raw_data) == "family_history_with_overweight"] <- "ObesityFam"
+names(raw_data)[names(raw_data) == "FAVC"] <- "FreqConsHighCalFood"
+names(raw_data)[names(raw_data) == "FCVC"] <- "FreqConsVegs"
+names(raw_data)[names(raw_data) == "NCP"] <- "NumMainMeals"
+names(raw_data)[names(raw_data) == "CAEC"] <- "ConsFoodBetwMeals"
+names(raw_data)[names(raw_data) == "CH2O"] <- "ConsWaterDaily"
+names(raw_data)[names(raw_data) == "CALC"] <- "ConsAlc"
+names(raw_data)[names(raw_data) == "SCC"] <- "CalsConsMon"
+names(raw_data)[names(raw_data) == "FAF"] <- "PhysActFreq"
+names(raw_data)[names(raw_data) == "TUE"] <- "TimeTechDev"
+names(raw_data)[names(raw_data) == "MTRANS"] <- "Trans"
+names(raw_data)[names(raw_data) == "family_history_with_overweight"] <- "ObesityFam"
 
 cleaned_data <- raw_data
 
-# Clean and standardize the FAF and FCVC columns by rounding the values to the nearest whole number
-cleaned_data$FAF <- round(cleaned_data$FAF)
-cleaned_data$FAF <- pmin(pmax(cleaned_data$FAF, 0), 3)
-cleaned_data$FCVC <- round(cleaned_data$FCVC)
-cleaned_data$FCVC <- pmin(pmax(cleaned_data$FCVC, 0), 3)
+# Clean and standardize the PhysActFreq and FreqConsVegs columns by rounding the values to the nearest whole number
+cleaned_data$PhysActFreq <- round(cleaned_data$PhysActFreq)
+cleaned_data$PhysActFreq <- pmin(pmax(cleaned_data$PhysActFreq, 0), 3)
+cleaned_data$FreqConsVegs <- round(cleaned_data$FreqConsVegs)
+cleaned_data$FreqConsVegs <- pmin(pmax(cleaned_data$FreqConsVegs, 0), 3)
 
-# Create categorical factors from FAF, FCVC and Age
-cleaned_data$FAF <- ifelse(cleaned_data$FAF == 0, 'No activity',
-                            ifelse(cleaned_data$FAF == 1, 'Low activity',
-                                   ifelse(cleaned_data$FAF == 2, 'Moderate activity', 'High activity')))
+# Create categorical factors from PhysActFreq, FreqConsVegs and Age
+cleaned_data$PhysActFreq <- ifelse(cleaned_data$PhysActFreq == 0, 'No activity',
+                            ifelse(cleaned_data$PhysActFreq == 1, 'Low activity',
+                                   ifelse(cleaned_data$PhysActFreq == 2, 'Moderate activity', 'High activity')))
 
-cleaned_data$FCVC <- ifelse(cleaned_data$FCVC == 1, 'Low consumption',
-                             ifelse(cleaned_data$FCVC == 2, 'Moderate consumption', 'High consumption'))
+cleaned_data$FreqConsVegs <- ifelse(cleaned_data$FreqConsVegs == 1, 'Low consumption',
+                             ifelse(cleaned_data$FreqConsVegs == 2, 'Moderate consumption', 'High consumption'))
 
 cleaned_data <- cleaned_data %>%
   mutate(across(where(is.character), as.factor))
@@ -108,7 +107,7 @@ The dataset contains the following columns:
 * **CalsConsMon**: Categorical (yes, no)
 * **PhysActFreq**: Categorical (No activity, Low activity, Moderate activity, High activity)
 * **TimeTechDev**: Numerical
-* **CALC**: Categorical (No, Sometimes, Frequently, Always)
+* **ConsAlc**: Categorical (No, Sometimes, Frequently, Always)
 * **Trans**: Categorical (Public Transport, Walking, Automobile, Motorbike, Bike)
 * **Nobesity**: Categorical (different levels of obesity)
 
@@ -122,8 +121,8 @@ To construct the Bayesian network, we need to select variables that could logica
 4. FreqConsHighCalFood
 5. FreqConsVegs
 6. PhysActFreq
-8. CalsConsMon
-7. Nobesity (target variable for predictions)
+7. CalsConsMon
+8. Nobesity (target variable for predictions)
 
 ### Relationships
 
@@ -146,7 +145,7 @@ $~$
 
 $~$
 
-Here is the visual representation of the Bayesian Network based on the relationships we discussed. This graph illustrates how different factors such as Gender, Form of transformation (Trans), family history of overweight (ObesityFam), frequent high caloric food consumption (FAVC), frequency of vegetable consumption (FCVC), physical activity frequency (FAF) and the fact that individual is monitoring his calories (SCC) are hypothesized to influence obesity levels (Nobesity).
+Here is the visual representation of the Bayesian Network based on the relationships we discussed. This graph illustrates how different factors such as Gender, Form of transformation (Trans), family history of overweight (ObesityFam), frequent high caloric food consumption (FreqConsHighCalFood), frequency of vegetable consumption (FreqConsVegs), physical activity frequency (PhysActFreq) and the fact that individual is monitoring his calories (CalsConsMon) are hypothesized to influence obesity levels (Nobesity).
 
 # Sales marketing Questions
 
@@ -182,13 +181,13 @@ Let's start by calculating probability distributions of each variable
 ```{r}
 # Calculate probability distributions
 prob_gender <- prop.table(table(cleaned_data$Gender))
-prob_trans <- prop.table(table(cleaned_data$MTRANS))
-prob_obesityfam <- prop.table(table(cleaned_data$family_history_with_overweight))
-prob_FAVC <- prop.table(table(cleaned_data$FAVC))
-prob_FCVC <- prop.table(table(cleaned_data$FCVC))
-prob_FAF <- prop.table(table(cleaned_data$FAF))
-prob_scc <- prop.table(table(cleaned_data$SCC))
-prob_calc <- prop.table(table(cleaned_data$CALC))
+prob_trans <- prop.table(table(cleaned_data$Trans))
+prob_obesityfam <- prop.table(table(cleaned_data$ObesityFam))
+prob_FreqConsHighCalFood <- prop.table(table(cleaned_data$FreqConsHighCalFood))
+prob_FreqConsVegs <- prop.table(table(cleaned_data$FreqConsVegs))
+prob_PhysActFreq <- prop.table(table(cleaned_data$PhysActFreq))
+prob_CalsConsMon <- prop.table(table(cleaned_data$CalsConsMon))
+prob_ConsAlc <- prop.table(table(cleaned_data$ConsAlc))
 prob_nobesity <- prop.table(table(cleaned_data$Nobesity))
 ```
 
@@ -203,22 +202,22 @@ kable(prob_trans, caption = "Probability of Form of transportation", col.names =
 kable(prob_obesityfam, caption = "Probability of Family history with overweight", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
   kable_styling(position = "left")
 
-kable(prob_FAVC, caption = "Probability of Consumtion frequency of high caloric food", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
+kable(prob_FreqConsHighCalFood, caption = "Probability of Consumtion frequency of high caloric food", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
   kable_styling(position = "left")
 
-kable(prob_FCVC, caption = "Probability of Consumption frequency of vegetables", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
+kable(prob_FreqConsVegs, caption = "Probability of Consumption frequency of vegetables", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
   kable_styling(position = "left")
 
-kable(prob_FAF, caption = "Probability of frequency of physical activity", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
+kable(prob_PhysActFreq, caption = "Probability of frequency of physical activity", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
   kable_styling(position = "left")
 
-kable(prob_scc, caption = "Probability of monitoring calorie intake", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
+kable(prob_CalsConsMon, caption = "Probability of monitoring calorie intake", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
   kable_styling(position = "left")
 
 kable(prob_nobesity, caption = "Probability of Obesity", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
   kable_styling(position = "left")
 
-kable(prob_calc, caption = "Probability of consumtion of alcohol", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
+kable(prob_ConsAlc, caption = "Probability of consumtion of alcohol", col.names = c("", "Probability"), format = "html", table.attr = "style='width:50%;'")  %>%
   kable_styling(position = "left")
 ```
 
