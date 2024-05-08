@@ -1,11 +1,13 @@
 ---
-title: "Semestral Project: Belief network"
+title: 'Semestral Project: Belief network'
 author: "David Wagner, Viktor Klíma"
 date: "`r format(Sys.Date(), '%d.%m.%Y')`"
-output: 
-  html_document:
+output:
+  html_document: 
     toc: true
     toc_float: true
+  pdf_document:
+    toc: true
 ---
 
 # Introduction
@@ -226,7 +228,7 @@ kable(prob_ConsAlc, caption = "Probability of consumtion of alcohol", col.names 
 ### 1) Joint Probability
 > What is the joint probability of being male, frequently consuming high caloric food, and being classified as Obesity Type II?
 
-![](C:/work/oznal/OZNAL_zadania/Data/vypocet1.pdf){width=100% height=1200}
+![](C:/work/oznal/OZNAL_zadania/Data/vypocet1/vypocet1-1.png)
 
 **0.0626056**
 
@@ -237,7 +239,7 @@ For marketing purposes, it suggests potential target segments that may be intere
 ### 2) Marginal Probability
 > What is the probability distribution of obesity categories among individuals with a family history of overweight?
 
-![](C:/work/oznal/OZNAL_zadania/Data/vypocet2.pdf){width=100% height=1200}
+![](C:/work/oznal/OZNAL_zadania/Data/vypocet2/vypocet2-1.png)
 
 The provided probabilities represent the distribution of different obesity categories among individuals who have a family history of overweight. Each probability corresponds to the likelihood of an individual falling into a specific obesity category given their family history of overweight. For example, the highest probability (0.1359517) suggests that Normal Weight is the most common obesity category among individuals with a family history of overweight.
 
@@ -246,7 +248,8 @@ Understanding the distribution of obesity categories within this group allows ma
 ### 3) Conditional Probability
 > Given that an individual is female and frequently consumes alcohol, what is the probability that she falls into the Overweight or Obesity categories?
 
-![](C:/work/oznal/OZNAL_zadania/Data/vypocet3.pdf){width=100% height=2400}
+![](C:/work/oznal/OZNAL_zadania/Data/vypocet3/vypocet3-1.png)
+![](C:/work/oznal/OZNAL_zadania/Data/vypocet3/vypocet3-2.png)
 
 **0.7351970**
 
@@ -257,7 +260,9 @@ Marketers can use this insight to tailor messaging or develop products targeting
 ### 4) Conditional Probability
 >What is the probability of using public transportation given that an individual has a high frequency of consuming vegetables and is classified under Normal Weight?
 
-![](C:/work/oznal/OZNAL_zadania/Data/vypocet4.pdf){width=100% height=2400}
+![](C:/work/oznal/OZNAL_zadania/Data/vypocet4/vypocet4-1.png)
+![](C:/work/oznal/OZNAL_zadania/Data/vypocet4/vypocet4-2.png)
+
 
 **0.6006884**
 
@@ -268,7 +273,9 @@ Marketers can target this segment with advertisements for eco-friendly products 
 ### 5) Conditional Probability
 >Given that an individual monitors calorie consumption and has a high physical activity frequency, what is the probability that they are not overweight?
 
-![](C:/work/oznal/OZNAL_zadania/Data/vypocet5.pdf){width=100% height=3600}
+![](C:/work/oznal/OZNAL_zadania/Data/vypocet5/vypocet5-1.png)
+![](C:/work/oznal/OZNAL_zadania/Data/vypocet5/vypocet5-2.png)
+![](C:/work/oznal/OZNAL_zadania/Data/vypocet5/vypocet5-3.png)
 
 **0.0869251**
 
